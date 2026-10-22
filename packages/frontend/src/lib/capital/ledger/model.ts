@@ -10,6 +10,7 @@ import {
 } from "../urls";
 import { deriveCapex, type CapexQuarter, type CapexView } from "./capex";
 import { isCompanyFinancing, isFinancing } from "./financing";
+import { valuationRatio, type ValuationRatio } from "./ratio";
 import { hasPrimarySource, ledgerContent, type LedgerContent } from "./content";
 import { formatAmountShort, formatAmountWords, formatMoney, formatQuantity, formatTerm, monogram } from "./format";
 import {
@@ -683,15 +684,16 @@ export function createLedgerModel(content: LedgerContent) {
 
   /**
    * Step-up in post-money valuation vs the previous round, computed by Tokscale. Only between
-   * two sourced, non-press valuations in the same currency; null otherwise.
+   * two sourced, non-press valuations in the same currency. Bounds/approximations survive;
+   * incompatible bounds return null rather than pretending their thresholds are exact values.
    */
-  function stepUp(e: EventView): { ratio: number; previous: EventView; formula: string } | null {
+  function stepUp(e: EventView): (ValuationRatio & { previous: EventView; formula: string }) | null {
     const previous = previousRound(e);
     const now = e.valuation?.amount;
     const before = previous?.valuation?.amount;
-    if (!previous || !now || !before || now.value === null || before.value === null || before.value === 0) return null;
-    if (now.currency !== before.currency || now.status === "reported") return null;
-    return { ratio: now.value / before.value, previous, formula: `${formatMoney(now.value, now.currency)} ÷ ${formatMoney(before.value, before.currency)}` };
+    if (!previous || !now || !before || now.status === "reported") return null;
+    const result = valuationRatio(now, before);
+    return result ? { ...result, previous, formula: `${formatAmountShort(now)} ÷ ${formatAmountShort(before)}` } : null;
   }
 
   /** One row per company for the directory. Pure data; the page joins Tokscale usage. */

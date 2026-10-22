@@ -6,6 +6,13 @@ import { generateMetadata } from "@/app/(main)/capital/deals/[slug]/page";
 import { ledger } from "@/lib/capital/ledger";
 
 describe("compute event presentation", () => {
+  it("renders Mistral's step-up as a lower bound, including the formula", () => {
+    const event = ledger.getEvent("mistral-series-d-2026")!;
+    const doc = new DOMParser().parseFromString(renderToStaticMarkup(<EventDetail e={event} />), "text/html");
+    const label = [...doc.querySelectorAll("dt")].find((node) => node.textContent === "Step-up vs Series C")!;
+    expect(label.nextElementSibling?.textContent).toBe(">1.79x");
+    expect(label.parentElement?.textContent).toContain("Computed by Tokscale: >€21B ÷ €11.7B");
+  });
   it("headlines the Cerebras agreement with its contract, not its working-capital loan", async () => {
     const event = ledger.getEvent("cerebras-openai-2025")!;
     expect(event.headline?.amount?.amount.measure).toBe("contract_value");

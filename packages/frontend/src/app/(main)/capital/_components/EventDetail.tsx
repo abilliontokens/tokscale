@@ -173,7 +173,7 @@ export function EventDetail({ e }: { e: EventView }) {
           {step ? (
             <div className={styles.stat}>
               <dt className={styles.statLabel}>Step-up vs {step.previous.event.roundLabel ?? "previous round"}</dt>
-              <dd className={styles.statValue}>{step.ratio.toFixed(2)}x</dd>
+              <dd className={styles.statValue}>{step.short}</dd>
               <dd className={styles.statSub}>Computed by Tokscale: {step.formula}</dd>
             </div>
           ) : null}
