@@ -7,6 +7,7 @@ import { calendarSpanLabel, fiscalLabel } from "@/lib/capital/ledger/capex";
 import { Missing } from "../_components/Amount";
 import { Breadcrumbs } from "../_components/Breadcrumbs";
 import { CapexBars } from "../_components/CapexBars";
+import { CapexSources } from "../_components/CapexSources";
 import { CapitalShell } from "../_components/CapitalShell";
 import { JsonLd } from "../_components/JsonLd";
 import { OrgMark } from "../_components/OrgMark";
@@ -202,9 +203,9 @@ export default function SpendingPage() {
                     {last ? (
                       <>
                         <span className={styles.num}>{formatMoney(last.value, last.currency)}</span>
-                        <a className={styles.srcLink} href={last.sources.at(-1)?.url} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
-                          {last.sources.at(-1)?.form} ↗
-                        </a>
+                        <span className={styles.cellSub}>
+                          <CapexSources sources={last.sources} compact />
+                        </span>
                       </>
                     ) : (
                       <Missing />

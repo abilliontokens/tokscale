@@ -24,6 +24,7 @@ import { loadUsageSnapshot, usageForLabs, type LabUsage } from "@/lib/capital/le
 import { Amount, Missing } from "../../_components/Amount";
 import { Breadcrumbs } from "../../_components/Breadcrumbs";
 import { CapexTable } from "../../_components/CapexTable";
+import { CapexSources } from "../../_components/CapexSources";
 import { CapitalShell } from "../../_components/CapitalShell";
 import { EventFeed } from "../../_components/EventFeed";
 import { JsonLd } from "../../_components/JsonLd";
@@ -154,7 +155,7 @@ function HeaderFacts({ p }: { p: CompanyProfile }) {
       sub={
         <>
           {calendarSpanLabel(latestCapex.start, latestCapex.end)}
-          {latestCapex.derived ? " · derived" : ""} · <a href={latestCapex.sources.at(-1)?.url}>{latestCapex.sources.at(-1)?.form}</a>
+          {latestCapex.derived ? " · derived" : ""} · <CapexSources sources={latestCapex.sources} compact />
         </>
       }
     />
