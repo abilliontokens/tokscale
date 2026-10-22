@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useId, useRef } from "react";
+import { useState, useMemo, useCallback, useId } from "react";
 import styled from "styled-components";
 import dynamic from "next/dynamic";
 import type { TokenContributionData, DailyContribution, ViewMode, ClientType, TooltipPosition } from "@/lib/types";
 import { getPalette } from "@/lib/themes";
 import { useSettings } from "@/lib/useSettings";
-import { filterByClient, filterByYear, recalculateIntensity, findBestDay, calculateCurrentStreak, calculateLongestStreak, resolveSelectedDay } from "@/lib/utils";
+import { filterByClient, filterByYear, recalculateIntensity, findBestDay, calculateCurrentStreak, calculateLongestStreak, dayHasActivity, resolveSelectedDay } from "@/lib/utils";
 import { TokenGraph2D } from "./TokenGraph2D";
 
 // Lazy load 3D graph (Three.js) - reduces initial bundle, SSR disabled for WebGL
@@ -82,12 +82,21 @@ export function GraphContainer({ data, totalActiveTimeMs, sessionCount, mcpServe
   const titleId = useId();
 
   const [view, setView] = useState<ViewMode>("2d");
-  const [selectedYear, setSelectedYear] = useState<string>(() => data.years.length > 0 ? data.years[data.years.length - 1].year : "");
+  const [selectedYear, setSelectedYear] = useState<string>(() =>
+    data.years.length > 0 ? data.years[data.years.length - 1].year : String(new Date().getFullYear())
+  );
   const [hoveredDay, setHoveredDay] = useState<DailyContribution | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // LocalClient mounts this component only after loading an export. Initialize the selection
+  // with that data, in the same render as the graph/summary, regardless of input array order.
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
+    let latest: string | null = null;
+    for (const day of data.contributions) {
+      if (day.date.startsWith(selectedYear) && dayHasActivity(day) && (!latest || day.date > latest)) latest = day.date;
+    }
+    return latest;
+  });
   const [clientFilter, setClientFilter] = useState<ClientType[]>([]);
-  const initializedRef = useRef(false);
 
   const palette = useMemo(() => getPalette(paletteName), [paletteName]);
   const availableYears = useMemo(() => data.years.map((y) => y.year), [data.years]);
@@ -128,19 +137,6 @@ export function GraphContainer({ data, totalActiveTimeMs, sessionCount, mcpServe
     };
   }, [yearContributions]);
 
-
-  useEffect(() => {
-    if (!initializedRef.current && yearContributions.length > 0) {
-      const activeDaysWithTokens = yearContributions.filter((c) => c.totals.tokens > 0);
-      if (activeDaysWithTokens.length > 0) {
-        const latestDay = activeDaysWithTokens[activeDaysWithTokens.length - 1];
-        // Intentional one-time initialization on first data load
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedDate(latestDay.date);
-        initializedRef.current = true;
-      }
-    }
-  }, [yearContributions]);
 
   const handleDayHover = useCallback((day: DailyContribution | null, position: TooltipPosition | null) => {
     setHoveredDay(day);

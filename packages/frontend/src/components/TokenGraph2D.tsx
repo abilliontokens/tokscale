@@ -4,7 +4,7 @@ import { useRef, useEffect, useCallback, useId, useMemo, useState } from "react"
 import styled from "styled-components";
 import type { DailyContribution, GraphColorPalette, TooltipPosition } from "@/lib/types";
 import { getDarkGraphColor } from "@/lib/darkGraphColors";
-import { formatCurrency, formatTokenCount, groupByWeek } from "@/lib/utils";
+import { dayHasActivity, formatCurrency, formatTokenCount, groupByWeek } from "@/lib/utils";
 import { CELL_SIZE, FONT_FAMILY, DAY_LABELS_SHORT, MONTH_LABELS_SHORT } from "@/lib/constants";
 import { addDays, format, getMonth, parseISO, startOfWeek, startOfYear } from "date-fns";
 
@@ -110,6 +110,7 @@ export function TokenGraph2D({ contributions, palette, year, hoveredDate = null,
   const [fontsReady, setFontsReady] = useState(false);
   const [keyboardCell, setKeyboardCell] = useState<Cell | null>(null);
   const instructionsId = useId();
+  const scrollAnchor = useRef<{ key: string; overflowing: boolean } | null>(null);
 
   const cellSize = getGraphCellSize(availableWidth, weeksData.length);
   const gap = cellSize < 16 ? 2 : 3;
@@ -127,6 +128,17 @@ export function TokenGraph2D({ contributions, palette, year, hoveredDate = null,
     });
     return index;
   }, [weeksData]);
+
+  // Empty calendar entries (including future days) are not a useful starting point.
+  const anchorDate = useMemo(() => {
+    if (selectedDate && cellIndexByDate.has(selectedDate)) return selectedDate;
+    let latest: string | null = null;
+    for (const day of contributions) {
+      if (cellIndexByDate.has(day.date) && dayHasActivity(day) && (!latest || day.date > latest)) latest = day.date;
+    }
+    return latest;
+  }, [selectedDate, cellIndexByDate, contributions]);
+  const anchorWeek = anchorDate ? cellIndexByDate.get(anchorDate)?.[0] ?? 0 : 0;
 
   // Same calendar as groupByWeek: week 0 starts on the Sunday on or before January 1.
   const firstSunday = useMemo(() => startOfWeek(startOfYear(parseISO(`${year}-01-01`)), { weekStartsOn: 0 }), [year]);
@@ -153,14 +165,6 @@ export function TokenGraph2D({ contributions, palette, year, hoveredDate = null,
       cancelled = true;
     };
   }, []);
-
-  // On a phone the year is wider than the card: start at the latest weeks, where the activity is.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container && container.scrollWidth > container.clientWidth) {
-      container.scrollLeft = container.scrollWidth;
-    }
-  }, [year, canvasWidth]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -239,6 +243,28 @@ export function TokenGraph2D({ contributions, palette, year, hoveredDate = null,
     if (keyboardCell) outline(keyboardCell, "#f4f7fb", 2);
   }, [palette, weeksData, cellIndexByDate, cellSize, boxSize, radius, canvasWidth, canvasHeight, hoveredDate, selectedDate, keyboardCell, fontsReady]);
 
+  // Run after sizing the canvas. Reveal the selected/latest active week, not empty December.
+  // A width change within the scrolling layout must not undo deliberate horizontal scrolling.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const key = `${year}:${anchorDate ?? "empty"}`;
+    const overflowing = container.scrollWidth > container.clientWidth;
+    const previous = scrollAnchor.current;
+    scrollAnchor.current = { key, overflowing };
+    if (previous?.key === key && (previous.overflowing || !overflowing)) return;
+    if (!anchorDate) {
+      container.scrollLeft = 0;
+    } else if (overflowing) {
+      const left = DAY_LABEL_WIDTH + anchorWeek * cellSize;
+      if (left < container.scrollLeft + DAY_LABEL_WIDTH) {
+        container.scrollLeft = Math.max(0, left - DAY_LABEL_WIDTH);
+      } else if (left + cellSize + RIGHT_PADDING > container.scrollLeft + container.clientWidth) {
+        container.scrollLeft = left + cellSize + RIGHT_PADDING - container.clientWidth;
+      }
+    }
+  }, [year, anchorDate, anchorWeek, cellSize, canvasWidth, availableWidth]);
+
   const getDayAtPosition = useCallback(
     (clientX: number, clientY: number): { day: DailyContribution | null; position: TooltipPosition } | null => {
       const canvas = canvasRef.current;
@@ -286,15 +312,7 @@ export function TokenGraph2D({ contributions, palette, year, hoveredDate = null,
 
   /* Keyboard: the canvas takes focus, the arrow keys move a ring between days, the tooltip follows the
      ring, and Enter does what a click does. A visually hidden live region reads each day out. */
-  const startCell = (): Cell => {
-    const selected = selectedDate ? cellIndexByDate.get(selectedDate) : undefined;
-    if (selected) return selected;
-    let latest: Cell | undefined;
-    for (const [, cell] of cellIndexByDate) {
-      if (!latest || cell[0] > latest[0] || (cell[0] === latest[0] && cell[1] > latest[1])) latest = cell;
-    }
-    return latest ?? [0, 0];
-  };
+  const startCell = (): Cell => (anchorDate ? cellIndexByDate.get(anchorDate) : undefined) ?? [0, 0];
 
   const showCell = (cell: Cell) => {
     setKeyboardCell(cell);

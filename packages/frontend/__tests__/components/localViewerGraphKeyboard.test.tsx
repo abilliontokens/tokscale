@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TokenGraph2D, moveGraphCell } from "@/components/TokenGraph2D";
 import { getPalette } from "@/lib/themes";
@@ -14,6 +14,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("2D graph keyboard moves", () => {
@@ -92,5 +93,86 @@ describe("2D graph keyboard use", () => {
     const { graph } = setup(null);
     fireEvent.keyDown(graph, { key: "Enter" });
     expect(document.querySelector("[aria-live=polite]")?.textContent).toContain("Tuesday, March 3, 2026");
+  });
+});
+
+
+describe("2D graph scroll anchor", () => {
+  let width: number;
+  let resize: ResizeObserverCallback;
+
+  beforeEach(() => {
+    width = 321;
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "DIV" ? width : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(700);
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+  });
+
+  function graph(contributions = localExport().contributions, selectedDate: string | null = null, year = "2026") {
+    return <TokenGraph2D contributions={contributions} palette={getPalette("blue")} year={year}
+      selectedDate={selectedDate} onDayHover={() => {}} onDayClick={() => {}} />;
+  }
+
+  const scroller = () => screen.getByRole("application").parentElement!;
+  const resizeTo = (next: number) => {
+    width = next;
+    act(() => resize([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver));
+  };
+
+  it("keeps early-year exports visible instead of scrolling to empty year-end weeks", () => {
+    render(graph());
+    expect(scroller().scrollLeft).toBe(0);
+  });
+
+  it("reveals the latest active week, ignoring later zero-value entries and input order", () => {
+    const source = localExport().contributions[0];
+    const days = [
+      { ...source, date: "2026-12-30", totals: { tokens: 0, cost: 0, messages: 0 } },
+      { ...source, date: "2026-10-20" },
+      { ...source, date: "2026-03-02" },
+    ];
+    render(graph(days));
+    // October 20 is in week 42: leave room for its cell and month label at the right edge.
+    expect(scroller().scrollLeft).toBe(32 + 42 * 12 + 12 + 24 - 321);
+  });
+
+  it("prefers a selected day and repositions for a new selection", () => {
+    const source = localExport().contributions[0];
+    const days = [{ ...source, date: "2026-03-02" }, { ...source, date: "2026-10-20" }];
+    const { rerender } = render(graph(days));
+    expect(scroller().scrollLeft).toBeGreaterThan(0);
+    rerender(graph(days, "2026-03-02"));
+    expect(scroller().scrollLeft).toBe(9 * 12);
+  });
+
+  it("preserves intentional scrolling during narrow-layout resizes and palette/data rerenders", () => {
+    const { rerender } = render(graph());
+    scroller().scrollLeft = 260;
+    resizeTo(380);
+    rerender(graph([...localExport().contributions]));
+    expect(scroller().scrollLeft).toBe(260);
+  });
+
+  it("reveals activity when a wide layout first becomes scrollable", () => {
+    width = 900;
+    const source = localExport().contributions[0];
+    render(graph([{ ...source, date: "2026-10-20" }]));
+    expect(scroller().scrollLeft).toBe(0);
+    resizeTo(321);
+    expect(scroller().scrollLeft).toBeGreaterThan(0);
+  });
+
+  it("handles old exports and resets to the start when the year has no activity", () => {
+    const source = localExport().contributions[0];
+    const { rerender } = render(graph([{ ...source, date: "2020-10-20" }], null, "2020"));
+    expect(scroller().scrollLeft).toBeGreaterThan(0);
+    rerender(graph([], null, "2021"));
+    expect(scroller().scrollLeft).toBe(0);
   });
 });
