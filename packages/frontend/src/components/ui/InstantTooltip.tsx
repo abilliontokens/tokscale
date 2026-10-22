@@ -74,6 +74,19 @@ function inside(element: Element, x: number, y: number): boolean {
   return false;
 }
 
+/** A row cover is transparent to tooltips; an opaque sticky cell or another control is not. */
+function visibleInRow(trigger: Element, row: Element, x: number, y: number): boolean {
+  if (!inside(trigger, x, y)) return false;
+  const hit = document.elementFromPoint(x, y);
+  if (!hit) return false;
+  if (trigger.contains(hit)) return true;
+  const cover = hit.closest("[data-row-primary], [data-row-cover]");
+  if (!cover || cover.closest("[data-row-link]") !== row) return false;
+  const cell = cover.closest("td, th");
+  // A primary link's ::after is confined to its sticky cell, unlike a whole-row cover.
+  return !cell || cell === trigger.closest("td, th") || getComputedStyle(cell).position !== "sticky";
+}
+
 function assignRef<T>(ref: Ref<T> | undefined, value: T): void {
   if (typeof ref === "function") ref(value);
   else if (ref) (ref as MutableRefObject<T>).current = value;
@@ -118,6 +131,7 @@ export function InstantTooltip({
   const Trigger = (as ?? "span") as ElementType;
   const triggerRef = useRef<Element | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
+  const rowPointer = useRef<{ x: number; y: number } | null>(null);
   const flags = useRef({ hover: false, focus: false, dismissed: false });
   const [open, setOpen] = useState(false);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -163,15 +177,17 @@ export function InstantTooltip({
     if (!trigger || !row || !enabled) return;
     const onMove = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
-      setHover(inside(trigger, event.clientX, event.clientY));
+      rowPointer.current = { x: event.clientX, y: event.clientY };
+      setHover(visibleInRow(trigger, row, event.clientX, event.clientY));
     };
     const onLeave = (event: PointerEvent) => {
+      rowPointer.current = null;
       const next = event.relatedTarget;
       if (next instanceof Node && tipRef.current?.contains(next)) return;
       setHover(false);
     };
     const onDown = (event: PointerEvent) => {
-      if (!inside(trigger, event.clientX, event.clientY)) return;
+      if (!visibleInRow(trigger, row, event.clientX, event.clientY)) return;
       flags.current.dismissed = true;
       sync();
     };
@@ -233,6 +249,9 @@ export function InstantTooltip({
         return;
       }
       place(trigger, tip);
+      const point = rowPointer.current;
+      const row = trigger.closest("[data-row-link]");
+      if (point && row && !visibleInRow(trigger, row, point.x, point.y)) setHover(false);
     };
     const schedule = () => {
       if (frame === 0) frame = window.requestAnimationFrame(update);
@@ -245,7 +264,7 @@ export function InstantTooltip({
       window.removeEventListener("scroll", schedule, true);
       window.removeEventListener("resize", schedule);
     };
-  }, [open, content]);
+  }, [open, content, setHover]);
 
   const inRow = () => Boolean(triggerRef.current?.closest("[data-row-link]"));
   const theirs = <E,>(name: string) => rest[name] as Handler<E>;
@@ -303,7 +322,10 @@ export function InstantTooltip({
           const trigger = triggerRef.current;
           const next = event.relatedTarget;
           if (trigger && next instanceof Node && trigger.contains(next)) return;
-          if (trigger && inside(trigger, event.clientX, event.clientY)) return;
+          const row = trigger?.closest("[data-row-link]");
+          if (trigger && (row
+            ? visibleInRow(trigger, row, event.clientX, event.clientY)
+            : inside(trigger, event.clientX, event.clientY))) return;
           setHover(false);
         }}
       >

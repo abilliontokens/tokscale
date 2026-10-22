@@ -3,11 +3,13 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { InstantTooltip } from "@/components/ui/InstantTooltip";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(document, "elementFromPoint");
 });
 
 function tooltipNode(): HTMLElement | null {
@@ -140,6 +142,7 @@ describe("InstantTooltip", () => {
     );
     const row = document.querySelector("tr") as HTMLTableRowElement;
     const trigger = screen.getByText("—");
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => screen.getByRole("link")) });
     giveBox(trigger, { left: 100, top: 10, right: 110, bottom: 30 });
 
     pointer("pointermove", row, { clientX: 20, clientY: 20 });
@@ -155,4 +158,33 @@ describe("InstantTooltip", () => {
     pointer("pointerleave", row, { relatedTarget: document.body });
     expect(tooltipNode()).toBeNull();
   });
+
+  it("rejects a covered value behind a sticky identity cell but permits the stretched row cover", () => {
+    render(<table><tbody><tr data-row-link="">
+      <td style={{ position: "sticky", left: 0 }}><a href="#model" data-row-primary="">Model</a></td>
+      <td><a href="#model" data-row-cover="" aria-hidden="true" tabIndex={-1} />
+        <InstantTooltip content="Active users increased">+87</InstantTooltip>
+      </td>
+    </tr></tbody></table>);
+    const row = document.querySelector("tr")!;
+    const trigger = screen.getByText("+87");
+    const identity = screen.getByText("Model");
+    const cover = document.querySelector("[data-row-cover]")!;
+    giveBox(trigger, { left: 100, top: 10, right: 150, bottom: 30 });
+    const hit = vi.fn((): Element => identity);
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: hit });
+
+    pointer("pointermove", row, { clientX: 120, clientY: 20 });
+    expect(tooltipNode()).toBeNull();
+    hit.mockReturnValue(cover);
+    pointer("pointermove", row, { clientX: 120, clientY: 20 });
+    expect(screen.getByRole("tooltip").textContent).toBe("Active users increased");
+    const tooltip = screen.getByRole("tooltip");
+    pointer("pointerleave", row, { relatedTarget: tooltip });
+    expect(tooltipNode()).toBe(tooltip);
+    hit.mockReturnValue(identity);
+    pointer("pointerout", tooltip, { clientX: 120, clientY: 20, relatedTarget: identity });
+    expect(tooltipNode()).toBeNull();
+  });
+
 });
