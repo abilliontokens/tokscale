@@ -19,5 +19,5 @@ Third-party data keeps the terms of its source and is not relicensed here:
 | --- | --- | --- |
 | `benchmarks/epoch.json` | Epoch AI | CC BY 4.0 |
 | `benchmarks/lmarena.json` | LMArena | CC BY 4.0 |
-| `benchmarks/models-dev.json` | models.dev | MIT |
+| `benchmarks/models-dev.json` | models.dev | MIT; [full notice](./third-party/models-dev/LICENSE) and [retrieval provenance](./third-party/models-dev/README.md) |
 | `benchmarks/tbench.json` | Terminal-Bench | Not stated by the source. Ask the source before you reuse it. |
