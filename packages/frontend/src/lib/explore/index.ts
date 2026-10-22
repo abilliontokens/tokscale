@@ -2,8 +2,9 @@
  * Explore data entry point. Pages import only from here.
  *
  * With DATABASE_URL set, every function reads cached rollups of
- * daily_breakdown (see ./db.ts, revalidated every 10 minutes). Without it,
- * the deterministic fixtures are returned so UI work does not need a database.
+ * daily_breakdown (see ./db.ts, revalidated every 10 minutes). Development
+ * and tests without a database can use fixtures. Production fails clearly
+ * when the database is not configured; it never publishes invented activity.
  */
 import { fixtureAgents, fixtureHumans, fixtureModelDetail, fixtureModels, fixtureSnapshot, fixtureCoverage } from "./fixtures";
 import { pageRows, rankRows, indexableModelKeys } from "./rollup";
@@ -25,7 +26,9 @@ export const MIN_INDEXABLE_MODEL_USERS = 5;
 const SNAPSHOT_SIZE = 5;
 
 function hasDatabase(): boolean {
-  return Boolean(process.env.DATABASE_URL);
+  if (process.env.DATABASE_URL) return true;
+  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") return false;
+  throw new Error("DATABASE_URL is required for public analytics outside development and tests");
 }
 
 function loadDb() {
