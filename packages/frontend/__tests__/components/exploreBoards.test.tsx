@@ -43,6 +43,18 @@ describe("ModelBoard", () => {
 });
 
 describe("AgentBoard", () => {
+  it("keeps complete long agent names in both responsive layouts", () => {
+    const rows = [{ ...fixtureAgents("30d")[0], name: "A long descriptive agent name that needs wrapping" }];
+    const markup = renderToStaticMarkup(<AgentBoard rows={rows} coverage={coverage} period="30d" sort="users" />);
+    expect(markup.match(/A long descriptive agent name that needs wrapping/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(markup).toContain("Client id");
+    expect(markup).toContain("Top models:");
+    const stacked = markup.slice(markup.indexOf("<ol"));
+    for (const model of rows[0].topModels) {
+      expect(stacked).toContain(`href="/models/${model.key}"`);
+    }
+  });
+
   it("lists top models as links to model pages", () => {
     const markup = renderToStaticMarkup(<AgentBoard rows={fixtureAgents("30d")} coverage={coverage} period="30d" sort="tokens" />);
     expect(markup).toContain("Claude Code");

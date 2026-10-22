@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Models and Agents rankings: a dense table from 840px up, and
- * information-complete stacked rows below it (no horizontal scrolling).
+ * Models and Agents rankings: dense tables on wide screens, and
+ * information-complete stacked rows below them (no horizontal scrolling).
  */
 import Link from "next/link";
 import styled from "styled-components";
@@ -22,15 +22,18 @@ import {
 import { UNKNOWN_LAB_NAME } from "./catalog";
 import { AgentMark, ChangeText, EmptyNote, InlineLink, ModelMark, ShareMeter, VisuallyHidden } from "./ExploreUI";
 
-/* The table needs about 800px (seven columns, names on one line); below 840px the stacked rows show instead. */
+/* The model table needs about 800px; narrower screens show stacked rows instead. */
 const TABLE_FROM = "840px";
 
-const TableWrap = styled.div`
+// Agent names and their top-model lists need more room than the model board.
+const AGENT_TABLE_FROM = "1100px";
+
+const TableWrap = styled.div<{ $from?: string }>`
   display: none;
   border-top: 1px solid var(--service-border);
   border-bottom: 1px solid var(--service-border);
 
-  @media (min-width: ${TABLE_FROM}) {
+  @media (min-width: ${({ $from }) => $from ?? TABLE_FROM}) {
     display: block;
   }
 `;
@@ -138,14 +141,15 @@ const NameLink = styled(Link)`
 `;
 
 const NameText = styled.span`
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
   min-width: 0;
   align-items: center;
   gap: 8px;
   color: var(--service-text);
   font-size: 0.9375rem;
   font-weight: 600;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 `;
 
 const SubText = styled.span`
@@ -228,13 +232,13 @@ const Footnote = styled.p`
 
 /* ----- Mobile rows ----- */
 
-const MobileList = styled.ol`
+const MobileList = styled.ol<{ $until?: string }>`
   margin: 0;
   padding: 0;
   border-top: 1px solid var(--service-border);
   border-bottom: 1px solid var(--service-border);
 
-  @media (min-width: ${TABLE_FROM}) {
+  @media (min-width: ${({ $until }) => $until ?? TABLE_FROM}) {
     display: none;
   }
 `;
@@ -514,7 +518,7 @@ export function AgentBoard({ rows, coverage, period, sort }: BoardProps<AgentUsa
 
   return (
     <>
-      <TableWrap>
+      <TableWrap $from={AGENT_TABLE_FROM}>
         <Table>
           <caption>
             <VisuallyHidden>{caption("Agents", sort, period)}</VisuallyHidden>
@@ -542,7 +546,7 @@ export function AgentBoard({ rows, coverage, period, sort }: BoardProps<AgentUsa
                     <Identity>
                       <NameText>
                         <AgentMark agent={row} size={20} />
-                        {row.name}
+                        <span>{row.name}</span>
                       </NameText>
                       <SubText>
                         Client id <code>{row.key}</code>
@@ -580,7 +584,7 @@ export function AgentBoard({ rows, coverage, period, sort }: BoardProps<AgentUsa
         </Table>
       </TableWrap>
 
-      <MobileList aria-label={caption("Agents", sort, period)}>
+      <MobileList $until={AGENT_TABLE_FROM} aria-label={caption("Agents", sort, period)}>
         {rows.map((row) => {
           const change = describeUsersChange(row.activeUsers, row.previousActiveUsers, row.isNew, period);
           const primaryIsUsers = sort === "users";
@@ -616,7 +620,13 @@ export function AgentBoard({ rows, coverage, period, sort }: BoardProps<AgentUsa
                 </MobileWide>
                 {row.topModels.length > 0 ? (
                   <MobileWide>
-                    Top models: {row.topModels.map((model) => `${model.name} ${formatShare(model.share)}`).join(", ")}
+                    Top models: {row.topModels.map((model, index) => (
+                      <span key={model.key}>
+                        {index > 0 ? ", " : ""}
+                        <TopModelLink href={modelPath(model.key)}>{model.name}</TopModelLink>{" "}
+                        {formatShare(model.share)}
+                      </span>
+                    ))}
                   </MobileWide>
                 ) : null}
               </MobileRow>
