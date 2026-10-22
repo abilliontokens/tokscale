@@ -6,10 +6,14 @@
  * into facts that ./rollup.ts aggregates. Accounts with
  * users.leaderboard_hidden = true are excluded in every query.
  *
- * Every public loader is wrapped in unstable_cache (revalidate 600 s). The
- * compute* functions are exported uncached for scripts and measurements.
+ * Public loaders cache bounded partitions (revalidate 600 s). Shared cache
+ * dependencies are resolved outside cache callbacks. The compute* functions
+ * are exported uncached for scripts and measurements.
  */
-import { unstable_cache } from "next/cache";
+import { createHash } from "node:crypto";
+import { getExploreCacheGeneration } from "./revision";
+import { partitionedCache } from "./partitionedCache";
+import { foldModelMixes, type ModelMixRollup } from "@/lib/benchmarks/usage";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { isIdentifiedModelKey, modelKey } from "./modelKey";
@@ -27,11 +31,36 @@ import {
 import type { ExplorePeriod, ModelDetail } from "./types";
 import { maxAnchorDate, queryStart, resolveWindow, toIsoDate, type ExploreWindow } from "./window";
 
-export const EXPLORE_REVALIDATE_SECONDS = 600;
-// v2: ModelRef gained logoUrl and more families got a lab. v3: Muse models attributed to Meta. v4: QwQ name.
-// v5: agent icons come from the README icons.
-const CACHE_VERSION = "v5";
-const TAGS = ["explore"];
+export { EXPLORE_REVALIDATE_SECONDS } from "./partitionedCache";
+const CACHE_VERSION = "v6-partitions";
+
+// Only concurrent work is shared in memory; completed results live exclusively
+// in Next's tagged cache, so a privacy invalidation cannot miss a second TTL.
+interface PendingLoad { readers: number; settled: boolean; result?: Promise<unknown> }
+const pending = new Map<string, PendingLoad>();
+async function shareColdLoad<T>(key: string, read: (computeOnce: (compute: () => Promise<T>) => Promise<T>) => Promise<T>): Promise<T> {
+  const entry = pending.get(key) ?? { readers: 0, settled: true };
+  entry.readers++;
+  pending.set(key, entry);
+  const release = () => {
+    if (entry.readers === 0 && entry.settled && pending.get(key) === entry) pending.delete(key);
+  };
+  try {
+    // Each reader still enters Next's cache to record its route dependencies.
+    // A stale reader can finish BEFORE its background refresh; retain that
+    // computation until it settles so subsequent requests share the SQL too.
+    return await read((compute) => {
+      if (!entry.result) {
+        entry.settled = false;
+        entry.result = compute().finally(() => { entry.settled = true; release(); });
+      }
+      return entry.result as Promise<T>;
+    });
+  } finally {
+    entry.readers--;
+    release();
+  }
+}
 
 /** Visible (not leaderboard-hidden) day rows. */
 const VISIBLE_DAYS = sql`
@@ -163,12 +192,24 @@ export async function computeUserTotals(window: ExploreWindow): Promise<UserTota
   }));
 }
 
-export async function computePeriodRollup(period: ExplorePeriod, catalog?: ModelCatalog, now: Date = new Date()): Promise<PeriodRollup> {
+interface PeriodData {
+  rollup: PeriodRollup;
+  mixes: ModelMixRollup;
+}
+
+async function computePeriodData(period: ExplorePeriod, catalog: ModelCatalog, now: Date = new Date()): Promise<PeriodData> {
   const window = await computeWindow(period, now);
   const facts = await computeFacts(window);
   const users = await computeUserTotals(window);
-  const resolvedCatalog = catalog ?? (await getModelCatalog());
-  return buildPeriodRollup({ window, facts, users, catalog: resolvedCatalog });
+  return {
+    rollup: buildPeriodRollup({ window, facts, users, catalog }),
+    mixes: foldModelMixes(window, facts),
+  };
+}
+
+export async function computePeriodRollup(period: ExplorePeriod, catalog?: ModelCatalog, now: Date = new Date()): Promise<PeriodRollup> {
+  // This uncached entry point does not call any cached dependencies either.
+  return (await computePeriodData(period, catalog ?? await computeCatalog(), now)).rollup;
 }
 
 type DetailQueryResult = {
@@ -265,21 +306,96 @@ export async function computeModelDetail(
   return buildModelDetail({ key, window, rollup, catalog, trend, cells, userDays });
 }
 
-export const getModelCatalog = unstable_cache(computeCatalog, ["explore", CACHE_VERSION, "catalog"], {
-  revalidate: EXPLORE_REVALIDATE_SECONDS,
-  tags: TAGS,
-});
-
-export function getPeriodRollup(period: ExplorePeriod): Promise<PeriodRollup> {
-  return unstable_cache(() => computePeriodRollup(period), ["explore", CACHE_VERSION, "rollup", period], {
-    revalidate: EXPLORE_REVALIDATE_SECONDS,
-    tags: TAGS,
-  })();
+async function getCatalogForGeneration(generation: string): Promise<ModelCatalog> {
+  return shareColdLoad(`${generation}:catalog`, (once) =>
+    partitionedCache(() => once(computeCatalog), ["explore", CACHE_VERSION, generation, "catalog"]));
 }
 
-export function getModelDetailCached(key: string, period: ExplorePeriod): Promise<ModelDetail | null> {
-  return unstable_cache(() => computeModelDetail(key, period), ["explore", CACHE_VERSION, "model", modelKey(key), period], {
-    revalidate: EXPLORE_REVALIDATE_SECONDS,
-    tags: TAGS,
-  })();
+export async function getModelCatalog(): Promise<ModelCatalog> {
+  return getCatalogForGeneration(await getExploreCacheGeneration());
+}
+
+async function getPeriodData(period: ExplorePeriod, generation?: string): Promise<PeriodData> {
+  const version = generation ?? await getExploreCacheGeneration();
+  // Never put this lookup inside the cached callback: Next bypasses nested
+  // unstable_cache reads, even when a catalog entry is already warm.
+  return shareColdLoad(`${version}:period:${period}`, async (once) => {
+    const catalog = await getCatalogForGeneration(version);
+    return partitionedCache(
+      () => once(() => computePeriodData(period, catalog)),
+      ["explore", CACHE_VERSION, version, "period", period],
+    );
+  });
+}
+
+export async function getPeriodRollup(period: ExplorePeriod): Promise<PeriodRollup> {
+  return (await getPeriodData(period)).rollup;
+}
+
+/** Pricing uses the same facts as leaderboards; do not scan them a second time. */
+export async function getPeriodModelMixes(period: ExplorePeriod): Promise<ModelMixRollup> {
+  return (await getPeriodData(period)).mixes;
+}
+
+export async function getModelDetailCached(rawKey: string, period: ExplorePeriod): Promise<ModelDetail | null> {
+  const key = modelKey(rawKey);
+  if (!isIdentifiedModelKey(key)) return null;
+  const generation = await getExploreCacheGeneration();
+  const catalog = await getCatalogForGeneration(generation);
+  if (!catalog.aliases[key]?.length) return null;
+  const { rollup } = await getPeriodData(period, generation);
+  // A dependency can return its previous snapshot during ordinary SWR. Bind
+  // the composed detail to that exact snapshot, not just the period name, so
+  // a later fresh rollup cannot hit a detail built with the older summary.
+  const dependencies = createHash("sha256").update(JSON.stringify({ catalog, rollup })).digest("hex");
+  return shareColdLoad(`${generation}:model:${key}:${period}:${dependencies}`, (once) => partitionedCache(
+    () => once(() => computeModelDetail(key, period, { catalog, rollup })),
+    ["explore", CACHE_VERSION, generation, "model", key, period, dependencies],
+  ));
+}
+
+/**
+ * Benchmark results only need recent model/account pairs, not detailed people,
+ * agents, previous-period facts, or an all-time catalog. Canonicalize before
+ * counting so two raw aliases used by one account still count as one user.
+ */
+export interface ModelUsageCounts {
+  start: string;
+  end: string;
+  counts: Record<string, number>;
+}
+
+export async function computeModelUsageCounts(period: ExplorePeriod = "30d"): Promise<ModelUsageCounts> {
+  const window = await computeWindow(period);
+  const rows = await db.execute<{ user_id: string; model: string }>(sql`
+    SELECT DISTINCT s.user_id::text AS user_id, m.key AS model
+    FROM ${VISIBLE_DAYS}
+    CROSS JOIN LATERAL jsonb_each(d.source_breakdown) AS c(key, value)
+    CROSS JOIN LATERAL ${MODEL_CELLS}
+    WHERE u.leaderboard_hidden = false
+      AND d.date >= ${window.start} AND d.date <= ${window.end}
+      AND jsonb_typeof(d.source_breakdown) = 'object'
+      AND jsonb_typeof(c.value) = 'object'
+      AND ${CELL_TOKENS} > 0
+  `);
+  const accounts = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const key = modelKey(row.model);
+    if (!isIdentifiedModelKey(key)) continue;
+    if (!accounts.has(key)) accounts.set(key, new Set());
+    accounts.get(key)!.add(row.user_id);
+  }
+  return {
+    start: window.start,
+    end: window.end,
+    counts: Object.fromEntries([...accounts].map(([key, users]) => [key, users.size])),
+  };
+}
+
+export async function getModelUsageCounts(): Promise<ModelUsageCounts> {
+  const generation = await getExploreCacheGeneration();
+  return shareColdLoad(`${generation}:model-usage-counts:30d`, (once) => partitionedCache(
+    () => once(() => computeModelUsageCounts("30d")),
+    ["explore", CACHE_VERSION, generation, "model-usage-counts", "30d"],
+  ));
 }
