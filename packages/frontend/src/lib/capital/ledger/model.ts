@@ -9,6 +9,8 @@ import {
   sectorPath,
 } from "../urls";
 import { deriveCapex, type CapexQuarter, type CapexView } from "./capex";
+import { isCompanyFinancing, isFinancing } from "./financing";
+import { valuationRatio, type ValuationRatio } from "./ratio";
 import { hasPrimarySource, ledgerContent, type LedgerContent } from "./content";
 import { formatAmountShort, formatAmountWords, formatMoney, formatQuantity, formatTerm, monogram } from "./format";
 import {
@@ -326,10 +328,19 @@ export function createLedgerModel(content: LedgerContent) {
     const eventSources = event.sourceIds.map(sourceOf);
     const primary = hasPrimarySource(event.sourceIds, sources);
 
-    // The feed number: a counted amount first; else an amount a later event already counts (shown as such); else a quantity.
+    const isCompute = event.types.some((t) => COMPUTE_TYPES.has(t));
+    // A compute deal leads with its contract, not ancillary financing. Financing events still
+    // lead with money raised, even when they also include a compute commitment.
+    const headlineMeasures: Measure[] =
+      event.kind === "deal" && isCompute
+        ? ["contract_value", "compute_commitment", ...HEADLINE_MEASURES]
+        : event.kind === "acquisition"
+          ? ["purchase_price", ...HEADLINE_MEASURES]
+          : HEADLINE_MEASURES;
+    // A counted amount first; else an amount a later event already counts; else a quantity.
     const headlineAmount =
-      HEADLINE_MEASURES.map((m) => amounts.find((a) => a.amount.measure === m && a.skipped === null)).find(Boolean) ??
-      HEADLINE_MEASURES.map((m) => amounts.find((a) => a.amount.measure === m && a.skipped === "included_in")).find(Boolean) ??
+      headlineMeasures.map((m) => amounts.find((a) => a.amount.measure === m && a.skipped === null)).find(Boolean) ??
+      headlineMeasures.map((m) => amounts.find((a) => a.amount.measure === m && a.skipped === "included_in")).find(Boolean) ??
       null;
     const headlineQuantity = quantities.find((q) => q.quantity.measure !== "shares" && q.quantity.measure !== "investors") ?? null;
     const headline = headlineAmount
@@ -357,7 +368,7 @@ export function createLedgerModel(content: LedgerContent) {
       event,
       route: eventRoute(event),
       ogImage: eventRoute(event) === "rounds" ? roundOgImagePath(event.slug) : dealOgImagePath(event.slug),
-      tag: feedTag(event.types),
+      tag: feedTag(event.kind === "deal" && isCompute ? event.types.filter((t) => COMPUTE_TYPES.has(t)) : event.types),
       typeLabels: event.types.map((t) => EVENT_TYPE_LABELS[t]),
       statusLabel: EVENT_STATUS_LABELS[event.status],
       issuer: issuerEntry?.org ?? null,
@@ -372,7 +383,7 @@ export function createLedgerModel(content: LedgerContent) {
       valuation: amounts.find((a) => a.amount.measure === "valuation_post") ?? null,
       partiesText,
       relations: event.relations.map((r) => ({ type: r.type, note: r.note ?? null, event: refOf(events.get(r.event)!) })),
-      isCompute: event.types.some((t) => COMPUTE_TYPES.has(t)),
+      isCompute,
     };
     eventViewCache.set(event.id, view);
     return view;
@@ -424,13 +435,11 @@ export function createLedgerModel(content: LedgerContent) {
     if (!org) return null;
     const view = orgView(org.id);
     const timeline = eventsOf(org.id);
-    const rounds = timeline.filter(
-      (e) => e.route === "rounds" && e.event.participants.some((p) => p.org === org.id && (p.roles.includes("issuer") || p.roles.includes("filer") || p.roles.includes("borrower")))
-    );
+    const rounds = timeline.filter((e) => isCompanyFinancing(e.event, org.id));
     const compute = timeline.filter((e) => e.isCompute);
     const otherDeals = timeline.filter((e) => e.route === "deals" && !e.isCompute);
     const asInvestor = timeline.filter(
-      (e) => e.route === "rounds" && e.event.participants.some((p) => p.org === org.id && p.roles.some((r) => INVESTOR_ROLES.has(r)))
+      (e) => isFinancing(e.event) && e.event.participants.some((p) => p.org === org.id && p.roles.some((r) => INVESTOR_ROLES.has(r)))
     );
     const investors = new Map<string, { org: OrgView; roles: Set<Role>; events: EventRef[] }>();
     for (const round of rounds) {
@@ -675,26 +684,23 @@ export function createLedgerModel(content: LedgerContent) {
 
   /**
    * Step-up in post-money valuation vs the previous round, computed by Tokscale. Only between
-   * two sourced, non-press valuations in the same currency; null otherwise.
+   * two sourced, non-press valuations in the same currency. Bounds/approximations survive;
+   * incompatible bounds return null rather than pretending their thresholds are exact values.
    */
-  function stepUp(e: EventView): { ratio: number; previous: EventView; formula: string } | null {
+  function stepUp(e: EventView): (ValuationRatio & { previous: EventView; formula: string }) | null {
     const previous = previousRound(e);
     const now = e.valuation?.amount;
     const before = previous?.valuation?.amount;
-    if (!previous || !now || !before || now.value === null || before.value === null || before.value === 0) return null;
-    if (now.currency !== before.currency || now.status === "reported") return null;
-    return { ratio: now.value / before.value, previous, formula: `${formatMoney(now.value, now.currency)} ÷ ${formatMoney(before.value, before.currency)}` };
+    if (!previous || !now || !before || now.status === "reported") return null;
+    const result = valuationRatio(now, before);
+    return result ? { ...result, previous, formula: `${formatAmountShort(now)} ÷ ${formatAmountShort(before)}` } : null;
   }
 
   /** One row per company for the directory. Pure data; the page joins Tokscale usage. */
   function directoryRows() {
     return companies().map((org) => {
       const timeline = eventsOf(org.id);
-      const financing = timeline.filter(
-        (e) =>
-          e.route === "rounds" &&
-          e.event.participants.some((p) => p.org === org.id && (p.roles.includes("issuer") || p.roles.includes("filer") || p.roles.includes("borrower")))
-      );
+      const financing = timeline.filter((e) => isCompanyFinancing(e.event, org.id));
       const lastRound = financing.find((e) => e.event.types.includes("equity_round")) ?? null;
       const lastFinancing = financing[0] ?? null;
       const valuation = headerAmount(org.id, "valuation_post", "issuer");
@@ -760,7 +766,9 @@ export function createLedgerModel(content: LedgerContent) {
       const event = [...events.values()].find((e) => e.slug === slug);
       return event ? eventView(event) : null;
     },
+    // Route selectors are for static params. Category indexes can include events on either route.
     getRounds: () => allEvents().filter((e) => e.route === "rounds"),
+    getFinancings: () => allEvents().filter((e) => isFinancing(e.event)),
     getDeals: () => allEvents().filter((e) => e.route === "deals"),
     getComputeDeals: () => allEvents().filter((e) => e.isCompute),
     getCompanies: companies,

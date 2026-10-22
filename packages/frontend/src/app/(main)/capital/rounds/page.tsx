@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { TOKSCALE_X_HANDLE } from "@/lib/community";
 import { capitalPath, methodologyPath, roundsPath, roundsUrl } from "@/lib/capital";
-import { formatPartialDate, ledger, type EventView } from "@/lib/capital/ledger";
+import { EQUITY_MEASURES, financingAmount, formatPartialDate, ledger, type EventView, type Measure } from "@/lib/capital/ledger";
 import { Amount, Missing } from "../_components/Amount";
 import { Breadcrumbs } from "../_components/Breadcrumbs";
 import { CapitalShell } from "../_components/CapitalShell";
@@ -24,12 +24,12 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", site: TOKSCALE_X_HANDLE, title: TITLE, description: DESCRIPTION },
 };
 
-const FILTERS: Array<{ key: string; label: string; match: (e: EventView) => boolean }> = [
+const FILTERS: Array<{ key: string; label: string; measures?: readonly Measure[]; match: (e: EventView) => boolean }> = [
   { key: "", label: "All", match: () => true },
-  { key: "equity", label: "Equity rounds", match: (e) => e.event.types.includes("equity_round") || e.event.types.includes("strategic_investment") },
-  { key: "debt", label: "Debt", match: (e) => e.event.types.includes("debt_facility") },
-  { key: "ipo", label: "IPOs and listings", match: (e) => e.event.types.includes("ipo") || e.event.types.includes("registration") },
-  { key: "form-d", label: "Form D", match: (e) => e.event.types.includes("form_d") },
+  { key: "equity", label: "Equity rounds", measures: EQUITY_MEASURES, match: (e) => e.event.types.includes("equity_round") || e.event.types.includes("strategic_investment") || Boolean(financingAmount(e, EQUITY_MEASURES)) },
+  { key: "debt", label: "Debt", measures: ["debt_raised"], match: (e) => e.event.types.includes("debt_facility") || Boolean(financingAmount(e, ["debt_raised"])) },
+  { key: "ipo", label: "IPOs and listings", measures: ["ipo_proceeds"], match: (e) => e.event.types.includes("ipo") || e.event.types.includes("registration") || Boolean(financingAmount(e, ["ipo_proceeds"])) },
+  { key: "form-d", label: "Form D", measures: ["form_d_amount_sold", "form_d_offering_amount"], match: (e) => e.event.types.includes("form_d") || Boolean(financingAmount(e, ["form_d_amount_sold", "form_d_offering_amount"])) },
 ];
 
 interface PageProps {
@@ -40,7 +40,7 @@ export default async function RoundsPage({ searchParams }: PageProps) {
   const raw = (await searchParams).type;
   const key = (Array.isArray(raw) ? raw[0] : raw) ?? "";
   const filter = FILTERS.find((f) => f.key === key) ?? FILTERS[0];
-  const all = ledger.getRounds();
+  const all = ledger.getFinancings();
   const rows = all.filter(filter.match);
   const acquisitions = ledger.getDeals().filter((e) => e.event.kind === "acquisition");
 
@@ -96,8 +96,8 @@ export default async function RoundsPage({ searchParams }: PageProps) {
         </thead>
         <tbody>
           {rows.map((e) => {
-            // The model's headline amount: money raised or sold first, a Form D's offering size last.
-            const main = e.headline?.amount ?? null;
+            // The selected financing category can differ from a mixed event's compute headline.
+            const main = financingAmount(e, filter.measures);
             const leads = e.participants.filter((p) => p.roles.includes("lead_investor") || p.roles.includes("co_lead"));
             return (
               <tr key={e.id} data-row-link="">
@@ -116,7 +116,7 @@ export default async function RoundsPage({ searchParams }: PageProps) {
                     <>
                       <Amount view={main} />
                       <span className={styles.cellSub}>{main.amount.label ?? ""}</span>
-                      {e.headline?.countedElsewhere ? <span className={styles.cellSub}>counted in a later event</span> : null}
+                      {main.skipped === "included_in" ? <span className={styles.cellSub}>counted in a later event</span> : null}
                     </>
                   ) : (
                     <Missing reason="No amount stated in the source" />
@@ -129,7 +129,7 @@ export default async function RoundsPage({ searchParams }: PageProps) {
                   {leads.length > 0 ? leads.map((l) => l.org.displayName).join(", ") : <Missing />}
                 </td>
                 <td data-label="Status">
-                  <span className={styles.statusText}>{e.statusLabel}</span> <SourceLink source={e.sources[0]} />
+                  <span className={styles.statusText}>{main?.statusLabel ?? e.statusLabel}</span> <SourceLink source={main?.source ?? e.sources[0]} />
                 </td>
               </tr>
             );

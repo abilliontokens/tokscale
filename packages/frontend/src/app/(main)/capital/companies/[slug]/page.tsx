@@ -8,6 +8,9 @@ import {
   CATEGORY_LABELS,
   QUANTITY_UNITS,
   ROLE_LABELS,
+  EQUITY_MEASURES,
+  financingAmount,
+  financingLabel,
   formatMoney,
   formatPartialDate,
   formatTotal,
@@ -21,6 +24,7 @@ import { loadUsageSnapshot, usageForLabs, type LabUsage } from "@/lib/capital/le
 import { Amount, Missing } from "../../_components/Amount";
 import { Breadcrumbs } from "../../_components/Breadcrumbs";
 import { CapexTable } from "../../_components/CapexTable";
+import { CapexSources } from "../../_components/CapexSources";
 import { CapitalShell } from "../../_components/CapitalShell";
 import { EventFeed } from "../../_components/EventFeed";
 import { JsonLd } from "../../_components/JsonLd";
@@ -151,7 +155,7 @@ function HeaderFacts({ p }: { p: CompanyProfile }) {
       sub={
         <>
           {calendarSpanLabel(latestCapex.start, latestCapex.end)}
-          {latestCapex.derived ? " · derived" : ""} · <a href={latestCapex.sources.at(-1)?.url}>{latestCapex.sources.at(-1)?.form}</a>
+          {latestCapex.derived ? " · derived" : ""} · <CapexSources sources={latestCapex.sources} compact />
         </>
       }
     />
@@ -220,22 +224,23 @@ function HeaderFacts({ p }: { p: CompanyProfile }) {
     />
   ) : null;
   const lastFinancing = p.rounds[0] ?? null;
+  const lastFinancingAmount = lastFinancing ? financingAmount(lastFinancing, undefined, p.org.id) : null;
   const lastFinancingFact =
     lastFinancing && !p.latestRound ? (
       <Fact
         key="financing"
         label="Last financing"
         value={
-          lastFinancing.headline?.amount ? (
-            <Amount view={lastFinancing.headline.amount} />
+          lastFinancingAmount ? (
+            <Amount view={lastFinancingAmount} />
           ) : (
-            <Link href={lastFinancing.href}>{lastFinancing.typeLabels[0]}</Link>
+            <Link href={lastFinancing.href}>{financingLabel(lastFinancing)}</Link>
           )
         }
         sub={
           <>
-            <Link href={lastFinancing.href}>{lastFinancing.event.roundLabel ?? lastFinancing.typeLabels[0]}</Link> ·{" "}
-            {formatPartialDate(lastFinancing.date)} · {lastFinancing.statusLabel} · <SourceLink source={lastFinancing.sources[0]} />
+            <Link href={lastFinancing.href}>{financingLabel(lastFinancing)}</Link> ·{" "}
+            {formatPartialDate(lastFinancing.date)} · {lastFinancingAmount?.statusLabel ?? lastFinancing.statusLabel} · <SourceLink source={lastFinancingAmount?.source ?? lastFinancing.sources[0]} />
           </>
         }
       />
@@ -310,10 +315,8 @@ function FundingTable({ p }: { p: CompanyProfile }) {
       </thead>
       <tbody>
         {p.rounds.map((e) => {
-          const equity = e.amounts.find(
-            (a) => (a.amount.measure === "equity_raised" || a.amount.measure === "ipo_proceeds" || a.amount.measure === "form_d_amount_sold") && a.skipped === null
-          );
-          const debt = e.amounts.find((a) => a.amount.measure === "debt_raised" && a.skipped === null);
+          const equity = financingAmount(e, [...EQUITY_MEASURES, "ipo_proceeds", "form_d_amount_sold"], p.org.id) ?? undefined;
+          const debt = financingAmount(e, ["debt_raised"], p.org.id) ?? undefined;
           const leads = e.participants.filter((x) => x.roles.includes("lead_investor"));
           const coLeads = e.participants.filter((x) => x.roles.includes("co_lead") && !x.roles.includes("lead_investor"));
           const includes = e.relations.filter((r) => r.type === "includes");
@@ -364,9 +367,10 @@ function FundingRow({
         </td>
         <td className={styles.full}>
           <Link className={styles.cellMain} href={e.href} data-row-primary="">
-            {e.event.roundLabel ?? e.typeLabels[0]}
+            {financingLabel(e)}
           </Link>
           {detail ? <span className={styles.cellSub}>{detail}</span> : null}
+          {equity?.skipped === "included_in" || debt?.skipped === "included_in" ? <span className={styles.cellSub}>counted in a later event</span> : null}
         </td>
         <td className={`${styles.right} ${equity ? "" : styles.emptyStacked}`} data-label="Equity">
           {equity ? <Amount view={equity} /> : <Missing />}
@@ -387,7 +391,7 @@ function FundingRow({
           ) : null}
         </td>
         <td data-label="Status">
-          <span className={styles.statusText}>{e.statusLabel}</span> <SourceLink source={e.sources[0]} />
+          <span className={styles.statusText}>{equity && debt ? e.statusLabel : (equity ?? debt)?.statusLabel ?? e.statusLabel}</span> <SourceLink source={(equity ?? debt)?.source ?? e.sources[0]} />
         </td>
       </tr>
       {includes.map((r) => (

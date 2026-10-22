@@ -2,6 +2,7 @@ import { formatMoney, formatPartialDate } from "@/lib/capital/ledger";
 import { calendarSpanLabel, fiscalLabel, type CapexView } from "@/lib/capital/ledger/capex";
 import { InstantTooltip } from "@/components/ui/InstantTooltip";
 import { CapexBars } from "./CapexBars";
+import { CapexSources } from "./CapexSources";
 import styles from "./capital.module.css";
 
 /** Quarterly cash capex for one company: bars plus the table with fiscal labels and filings. */
@@ -51,11 +52,7 @@ export function CapexTable({ view, name, limit = 8 }: { view: CapexView; name: s
                 )}
               </td>
               <td data-label="Filing">
-                {q.sources.map((s) => (
-                  <a key={s.accession} className={styles.srcLink} href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
-                    {s.form} {formatPartialDate(s.filed)} ↗
-                  </a>
-                ))}
+                <CapexSources sources={q.sources} />
               </td>
             </tr>
           ))}

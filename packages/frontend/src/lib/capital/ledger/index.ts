@@ -19,6 +19,7 @@ export type {
 } from "./model";
 export { total, totalsByCurrency, tryTotal, tryQuantityTotal, basisFamily, LedgerTotalError, type LedgerTotal } from "./total";
 export { MEASURE_DISPLAY_ORDER, displayRank, sortForDisplay } from "./display";
+export { EQUITY_MEASURES, financingAmount, financingLabel } from "./financing";
 export * from "./format";
 export * from "./labels";
 export type * from "./schema";

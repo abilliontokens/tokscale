@@ -92,11 +92,13 @@ function AmountRow({ a }: { a: AmountView }) {
 export function EventDetail({ e }: { e: EventView }) {
   const crumb = eventCrumbs(e);
   const step = ledger.stepUp(e);
-  // Money that moved first: a Form D's amount sold before its offering size, a round before its valuation.
-  const main = sortForDisplay(
+  // Keep the event's headline first, then the other typed amounts in their usual order.
+  const ordered = sortForDisplay(
     e.amounts.filter((a) => a.skipped === null && a.amount.measure !== "price_per_share"),
     (a) => a.amount.measure
-  ).slice(0, 3);
+  );
+  const headline = e.headline?.amount;
+  const main = (headline && ordered.includes(headline) ? [headline, ...ordered.filter((a) => a !== headline)] : ordered).slice(0, 3);
   // One component the source names inside the first amount ("includes $15 billion of previously committed investments").
   const parts = main[0] ? e.amounts.filter((a) => a.amount.partOf === main[0].amount.id) : [];
   const part = parts.length === 1 ? parts[0] : null;
@@ -171,7 +173,7 @@ export function EventDetail({ e }: { e: EventView }) {
           {step ? (
             <div className={styles.stat}>
               <dt className={styles.statLabel}>Step-up vs {step.previous.event.roundLabel ?? "previous round"}</dt>
-              <dd className={styles.statValue}>{step.ratio.toFixed(2)}x</dd>
+              <dd className={styles.statValue}>{step.short}</dd>
               <dd className={styles.statSub}>Computed by Tokscale: {step.formula}</dd>
             </div>
           ) : null}
