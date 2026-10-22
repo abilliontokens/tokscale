@@ -26,9 +26,11 @@ export function financingAmount(
   recipient?: string,
 ): AmountView | null {
   const candidates = event.amounts.filter((a) => !recipient || !a.amount.to || a.amount.to === recipient);
-  for (const skipped of [null, "included_in"] as const) {
-    for (const measure of measures) {
-      if (!FINANCING_MEASURES.includes(measure)) continue;
+  // Deduplication affects totals, not instrument priority: a current investment included in a
+  // later round still comes before a conditional commitment to invest more in the future.
+  for (const measure of measures) {
+    if (!FINANCING_MEASURES.includes(measure)) continue;
+    for (const skipped of [null, "included_in"] as const) {
       const amount = candidates.find((a) => a.amount.measure === measure && a.skipped === skipped);
       if (amount) return amount;
     }

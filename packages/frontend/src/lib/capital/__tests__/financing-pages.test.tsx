@@ -6,7 +6,7 @@ import RoundsPage from "@/app/(main)/capital/rounds/page";
 import { generateStaticParams as roundParams } from "@/app/(main)/capital/rounds/[slug]/page";
 import { generateStaticParams as dealParams } from "@/app/(main)/capital/deals/[slug]/page";
 import CompanyPage from "@/app/(main)/capital/companies/[slug]/page";
-import { financingAmount, ledger } from "@/lib/capital/ledger";
+import { EQUITY_MEASURES, financingAmount, ledger } from "@/lib/capital/ledger";
 import { isFinancing } from "@/lib/capital/ledger/financing";
 import { capitalSitemapEntries } from "@/lib/capital/sitemap";
 
@@ -30,6 +30,15 @@ describe("mixed-event financing", () => {
     expect(row.querySelector('[data-label="Amount"]')?.textContent).not.toContain("$20B");
     expect(row.querySelector('[data-label="Status"]')?.textContent).toContain("Closed");
     expect(row.hasAttribute("data-row-link")).toBe(true);
+  });
+
+  it("shows the facility rather than equity for OpenAI's mixed round in the Debt filter", async () => {
+    const event = ledger.getEvent("openai-funding-2026-03")!;
+    const page = await RoundsPage({ searchParams: Promise.resolve({ type: "debt" }) });
+    const document = doc(renderToStaticMarkup(page));
+    const row = document.querySelector(`a[data-row-primary][href="${event.href}"]`)!.closest("tr")!;
+    expect(row.querySelector('[data-label="Amount"]')?.textContent).toContain("≈$4.7B");
+    expect(row.querySelector('[data-label="Amount"]')?.textContent).not.toContain("$122B");
   });
 
   it("uses the debt amount on All as well, without changing the compute headline", async () => {
@@ -75,6 +84,32 @@ describe("mixed-event financing", () => {
     const urls = capitalSitemapEntries().filter((entry) => entry.url.endsWith(`/${slug}`));
     expect(urls).toHaveLength(1);
     expect(urls[0].url).toMatch(new RegExp(`${href}$`));
+  });
+
+  it.each([undefined, "equity"])("shows Amazon's current $5B investment before its future commitment in the %s index", async (type) => {
+    const event = ledger.getEvent("anthropic-amazon-2026-04")!;
+    expect(financingAmount(event)?.amount.id).toBe("investment");
+    expect(financingAmount(event, EQUITY_MEASURES)?.amount.id).toBe("investment");
+    const page = await RoundsPage({ searchParams: Promise.resolve({ type }) });
+    const document = doc(renderToStaticMarkup(page));
+    const row = document.querySelector(`a[data-row-primary][href="${event.href}"]`)!.closest("tr")!;
+    const amount = row.querySelector('[data-label="Amount"]')!;
+    expect(amount.textContent).toContain("$5B");
+    expect(amount.textContent).not.toContain("$20B");
+    expect(amount.textContent).toContain("counted in a later event");
+  });
+
+  it("keeps the counted current investment visible in Anthropic's funding history", async () => {
+    const event = ledger.getEvent("anthropic-amazon-2026-04")!;
+    const amount = financingAmount(event, [...EQUITY_MEASURES, "ipo_proceeds", "form_d_amount_sold"], "org_anthropic");
+    expect(amount?.amount.id).toBe("investment");
+    const page = await CompanyPage({ params: Promise.resolve({ slug: "anthropic" }) });
+    const child = page.props.children;
+    const document = doc(renderToStaticMarkup(await child.type(child.props)));
+    const row = document.querySelector(`#funding a[data-row-primary][href="${event.href}"]`)!.closest("tr")!;
+    expect(row.querySelector('[data-label="Equity"]')?.textContent).toContain("$5B");
+    expect(row.querySelector('[data-label="Equity"]')?.textContent).not.toContain("$20B");
+    expect(row.textContent).toContain("counted in a later event");
   });
 
   it("keeps genuine strategic financing discoverable without adding it again to equity totals", () => {
