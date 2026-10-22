@@ -21,6 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("local viewer page", () => {
@@ -31,6 +32,41 @@ describe("local viewer page", () => {
     expect(screen.getByRole("main").id).toBe("main-content");
     expect(screen.getByRole("heading", { level: 1, name: "Local viewer" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Footer" })).toBeTruthy();
+  });
+
+  it("selects the latest active date from an unsorted export, not its last entry", () => {
+    const data = localExport();
+    data.contributions = [
+      { ...data.contributions[1], date: "2026-10-20" },
+      { ...data.contributions[1], date: "2026-12-31", totals: { tokens: 0, cost: 0, messages: 0 } },
+      data.contributions[2],
+    ];
+    render(<LocalClient />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Export JSON" }), { target: { value: JSON.stringify(data) } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+    expect(within(screen.getByRole("region", { name: "Day breakdown" })).getByRole("heading", { name: "October 20, 2026" })).toBeTruthy();
+  });
+
+  it("does not open an arbitrary empty day when an export has no activity", () => {
+    const data = localExport();
+    data.contributions = data.contributions.map(day => ({ ...day, totals: { tokens: 0, cost: 0, messages: 0 } }));
+    render(<LocalClient />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Export JSON" }), { target: { value: JSON.stringify(data) } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+    expect(screen.getByRole("application", { name: "Daily token usage in 2026" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Day breakdown" })).toBeNull();
+  });
+
+  it("renders an empty export with no year entries without an invalid calendar", () => {
+    const data = localExport();
+    data.contributions = [];
+    data.years = [];
+    data.summary = { ...data.summary, totalTokens: 0, totalCost: 0, activeDays: 0, totalDays: 0 };
+    render(<LocalClient />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Export JSON" }), { target: { value: JSON.stringify(data) } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+    expect(screen.getByRole("application", { name: `Daily token usage in ${new Date().getFullYear()}` })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Day breakdown" })).toBeNull();
   });
 
   it("shows a loaded export and goes back to the input", () => {
@@ -70,7 +106,6 @@ describe("bundled sample data", () => {
     await waitFor(() => expect(screen.getByLabelText("Loaded export")).toBeTruthy(), { timeout: 5000 });
     expect(screen.getByRole("group", { name: "Client filters" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Day breakdown" })).toBeTruthy();
-    vi.unstubAllGlobals();
   });
 });
 
