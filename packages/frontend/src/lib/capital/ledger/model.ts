@@ -9,6 +9,7 @@ import {
   sectorPath,
 } from "../urls";
 import { deriveCapex, type CapexQuarter, type CapexView } from "./capex";
+import { isCompanyFinancing, isFinancing } from "./financing";
 import { hasPrimarySource, ledgerContent, type LedgerContent } from "./content";
 import { formatAmountShort, formatAmountWords, formatMoney, formatQuantity, formatTerm, monogram } from "./format";
 import {
@@ -433,13 +434,11 @@ export function createLedgerModel(content: LedgerContent) {
     if (!org) return null;
     const view = orgView(org.id);
     const timeline = eventsOf(org.id);
-    const rounds = timeline.filter(
-      (e) => e.route === "rounds" && e.event.participants.some((p) => p.org === org.id && (p.roles.includes("issuer") || p.roles.includes("filer") || p.roles.includes("borrower")))
-    );
+    const rounds = timeline.filter((e) => isCompanyFinancing(e.event, org.id));
     const compute = timeline.filter((e) => e.isCompute);
     const otherDeals = timeline.filter((e) => e.route === "deals" && !e.isCompute);
     const asInvestor = timeline.filter(
-      (e) => e.route === "rounds" && e.event.participants.some((p) => p.org === org.id && p.roles.some((r) => INVESTOR_ROLES.has(r)))
+      (e) => isFinancing(e.event) && e.event.participants.some((p) => p.org === org.id && p.roles.some((r) => INVESTOR_ROLES.has(r)))
     );
     const investors = new Map<string, { org: OrgView; roles: Set<Role>; events: EventRef[] }>();
     for (const round of rounds) {
@@ -699,11 +698,7 @@ export function createLedgerModel(content: LedgerContent) {
   function directoryRows() {
     return companies().map((org) => {
       const timeline = eventsOf(org.id);
-      const financing = timeline.filter(
-        (e) =>
-          e.route === "rounds" &&
-          e.event.participants.some((p) => p.org === org.id && (p.roles.includes("issuer") || p.roles.includes("filer") || p.roles.includes("borrower")))
-      );
+      const financing = timeline.filter((e) => isCompanyFinancing(e.event, org.id));
       const lastRound = financing.find((e) => e.event.types.includes("equity_round")) ?? null;
       const lastFinancing = financing[0] ?? null;
       const valuation = headerAmount(org.id, "valuation_post", "issuer");
@@ -769,7 +764,9 @@ export function createLedgerModel(content: LedgerContent) {
       const event = [...events.values()].find((e) => e.slug === slug);
       return event ? eventView(event) : null;
     },
+    // Route selectors are for static params. Category indexes can include events on either route.
     getRounds: () => allEvents().filter((e) => e.route === "rounds"),
+    getFinancings: () => allEvents().filter((e) => isFinancing(e.event)),
     getDeals: () => allEvents().filter((e) => e.route === "deals"),
     getComputeDeals: () => allEvents().filter((e) => e.isCompute),
     getCompanies: companies,

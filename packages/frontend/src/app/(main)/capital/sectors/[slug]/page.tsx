@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TOKSCALE_X_HANDLE } from "@/lib/community";
 import { absoluteUrl, capitalPath, companiesPath, sectorPath, sectorUrl, spendingPath } from "@/lib/capital";
-import { SECTORS, formatMoney, formatPartialDate, ledger } from "@/lib/capital/ledger";
+import { SECTORS, financingLabel, formatMoney, formatPartialDate, ledger } from "@/lib/capital/ledger";
 import { calendarSpanLabel, fiscalLabel } from "@/lib/capital/ledger/capex";
 import { Amount, Missing } from "../../_components/Amount";
 import { Breadcrumbs } from "../../_components/Breadcrumbs";
@@ -113,7 +113,7 @@ export default async function SectorPage({ params }: PageProps) {
               <td className={row.lastFinancing ? undefined : styles.emptyStacked} data-label="Last financing">
                 {row.lastFinancing ? (
                   <>
-                    <Link href={row.lastFinancing.href}>{row.lastFinancing.event.roundLabel ?? row.lastFinancing.typeLabels[0]}</Link>
+                    <Link href={row.lastFinancing.href}>{financingLabel(row.lastFinancing)}</Link>
                     <span className={styles.cellSub}>{formatPartialDate(row.lastFinancing.date)}</span>
                   </>
                 ) : (

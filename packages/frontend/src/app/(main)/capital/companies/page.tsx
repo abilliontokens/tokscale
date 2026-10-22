@@ -6,6 +6,7 @@ import {
   CATEGORIES,
   CATEGORY_LABELS,
   ORG_STATUS_LABELS,
+  financingLabel,
   formatMoney,
   formatPartialDate,
   formatTotal,
@@ -338,7 +339,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
                     <td className={row.lastFinancing ? undefined : styles.emptyStacked} data-label="Last financing">
                       {row.lastFinancing ? (
                         <>
-                          <Link href={row.lastFinancing.href}>{row.lastFinancing.event.roundLabel ?? row.lastFinancing.typeLabels[0]}</Link>
+                          <Link href={row.lastFinancing.href}>{financingLabel(row.lastFinancing)}</Link>
                           <span className={styles.cellSub}>{formatPartialDate(row.lastFinancing.date)}</span>
                         </>
                       ) : (
