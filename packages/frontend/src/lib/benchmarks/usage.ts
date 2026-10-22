@@ -7,7 +7,6 @@
  * Server only. Without DATABASE_URL there is no usage data: callers get null
  * and show the estimate as unavailable instead of inventing a mix.
  */
-import { unstable_cache } from "next/cache";
 import { isIdentifiedModelKey, modelKey } from "@/lib/explore/modelKey";
 import type { UsageFact } from "@/lib/explore/rollup";
 import type { ExplorePeriod } from "@/lib/explore/types";
@@ -20,9 +19,6 @@ export interface ModelMixRollup extends ModelMixes {
   start: string;
   end: string;
 }
-
-const REVALIDATE_SECONDS = 600;
-const CACHE_VERSION = "v1";
 
 /** Sum current-window facts into per-model and community mixes. Pure. */
 export function foldModelMixes(window: ExploreWindow, facts: readonly UsageFact[]): ModelMixRollup {
@@ -51,8 +47,13 @@ export async function computeModelMixes(period: ExplorePeriod, now: Date = new D
 
 export async function getModelMixes(period: ExplorePeriod): Promise<ModelMixRollup | null> {
   if (!process.env.DATABASE_URL) return null;
-  return unstable_cache(() => computeModelMixes(period), ["benchmarks", CACHE_VERSION, "mixes", period], {
-    revalidate: REVALIDATE_SECONDS,
-    tags: ["explore"],
-  })();
+  const { getPeriodModelMixes } = await import("@/lib/explore/db");
+  return getPeriodModelMixes(period);
+}
+
+/** Shared 30-day counts for benchmark pages; no all-time leaderboard load. */
+export async function getBenchmarkModelUsage() {
+  if (!process.env.DATABASE_URL) return null;
+  const { getModelUsageCounts } = await import("@/lib/explore/db");
+  return getModelUsageCounts();
 }

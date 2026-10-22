@@ -299,8 +299,8 @@ export interface ModelContext {
  */
 export function buildModelContext(
   model: BenchmarkModel,
-  recent: readonly ModelUsageRow[] | null,
-  allTime: readonly ModelUsageRow[] | null,
+  recent: readonly Pick<ModelUsageRow, "key" | "name" | "logoUrl" | "activeUsers">[] | null,
+  allTime: readonly Pick<ModelUsageRow, "key" | "name" | "logoUrl">[] | null = null,
 ): ModelContext {
   const refs = new Map<string, { name: string; logoUrl: string | null }>();
   for (const row of [...(recent ?? []), ...(allTime ?? [])]) {

@@ -184,7 +184,9 @@ export function buildPeriodRollup({ window, facts, users, catalog, humansLimit =
   const userModels = new Map<string, Map<string, number>>();
   const userAgents = new Map<string, Map<string, number>>();
   const keyCache = new Map<string, string>();
-  let totalTokens = 0;
+  // Scalar totals also include legacy days with no source_breakdown. Those
+  // tokens are unidentified, not absent from the coverage denominator.
+  const totalTokens = users.reduce((sum, user) => sum + Math.max(0, user.tokens), 0);
   let identifiedTokens = 0;
 
   for (const fact of facts) {
@@ -205,7 +207,6 @@ export function buildPeriodRollup({ window, facts, users, catalog, humansLimit =
       continue;
     }
 
-    totalTokens += fact.tokens;
     agentAcc.users.add(fact.userId);
     addSums(agentAcc.sums, fact);
     mapGet(userAgents, fact.userId, () => new Map()).set(agent, (userAgents.get(fact.userId)?.get(agent) ?? 0) + fact.tokens);

@@ -17,7 +17,8 @@ import {
   resultColumns,
 } from "@/lib/benchmarks/detail";
 import { TOKSCALE_X_HANDLE } from "@/lib/community";
-import { getModelLeaderboard } from "@/lib/explore";
+import { getBenchmarkModelUsage } from "@/lib/benchmarks/usage";
+import { modelRef } from "@/lib/explore/modelMeta";
 import { breadcrumbJsonLd, serializeJsonLd } from "@/lib/seo/explore";
 import { homeUrl } from "@/lib/seo/urls";
 
@@ -61,11 +62,10 @@ export default async function BenchmarkPage({ params }: PageProps) {
   const key = resolved.definition.slug;
 
   // Usage is optional on this page: without it the table and chart still render.
-  const [recent, allTime] = await Promise.all([
-    getModelLeaderboard({ period: "30d", limit: 1000 }).catch(() => null),
-    getModelLeaderboard({ period: "all", limit: 1000 }).catch(() => null),
-  ]);
-  const ctx = buildModelContext(benchmarkData, recent?.rows ?? null, allTime?.rows ?? null);
+  const recent = await getBenchmarkModelUsage().catch(() => null);
+  const ctx = buildModelContext(benchmarkData, recent
+    ? Object.entries(recent.counts).map(([key, activeUsers]) => ({ ...modelRef(key), activeUsers }))
+    : null);
   const rows = buildResultRows(resolved, ctx);
   const timeline = buildTimeline(resolved, benchmarkData.best(key), ctx);
 
@@ -86,7 +86,7 @@ export default async function BenchmarkPage({ params }: PageProps) {
           columns={resultColumns(rows)}
           timeline={timeline}
           mapping={mappingSummary(resolved.results)}
-          usageWindow={recent ? { start: recent.coverage.start, end: recent.coverage.end } : null}
+          usageWindow={recent ? { start: recent.start, end: recent.end } : null}
           sources={sourceNotes(benchmarkData, { slugs: [key], includeCatalog: timeline.catalogDates > 0 })}
         />
       </main>

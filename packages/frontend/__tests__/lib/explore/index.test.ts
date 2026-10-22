@@ -36,4 +36,19 @@ describe("@/lib/explore without DATABASE_URL", () => {
     expect(await explore.getModelDetail("claude-opus-5", "7d")).not.toBeNull();
     expect(await explore.getModelDetail("does-not-exist")).toBeNull();
   });
+  it.each(["production", undefined])("does not invent usage in %s without a database", async (mode) => {
+    vi.stubEnv("NODE_ENV", mode);
+    try {
+      const explore = await import("@/lib/explore");
+      const loaders = [
+        () => explore.getCommunitySnapshot(), () => explore.getModelLeaderboard(),
+        () => explore.getAgentLeaderboard(), () => explore.getHumansLeaderboard(),
+        () => explore.getModelDetail("claude-opus-5"), () => explore.listModelKeys(),
+      ];
+      for (const load of loaders) await expect(load()).rejects.toThrow("DATABASE_URL is required");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
 });
