@@ -2,7 +2,7 @@
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupportedAgent } from "@/components/home/agents";
 import { CopyCommand } from "@/components/home/CopyCommand";
@@ -102,6 +102,30 @@ describe("terminal UI tour", () => {
     expect(screen.getByRole("button", { name: /play tour/i })).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowDown" });
     expect(selected()).toHaveProperty("id", "tui-tab-hourly");
+  });
+
+
+  it("plays with the rotation toggle focused but still pauses for content hover and focus", () => {
+    const { container } = render(<TuiShowcase />);
+    const running = () => getComputedStyle(selected().lastElementChild!).animationPlayState;
+    const toggle = screen.getByRole("button", { name: /pause tour/i });
+    act(() => toggle.focus());
+    fireEvent.mouseOver(toggle);
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toContain("Play tour");
+    fireEvent.click(toggle);
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(running()).toBe("running");
+
+    fireEvent.mouseOver(screen.getByRole("tabpanel"));
+    expect(running()).toBe("paused");
+    fireEvent.mouseLeave(container.firstElementChild!);
+    expect(running()).toBe("running");
+    act(() => selected().focus());
+    expect(running()).toBe("paused");
+    act(() => toggle.focus());
+    expect(running()).toBe("running");
   });
 
   it("does not tour under reduced motion", () => {

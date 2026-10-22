@@ -75,6 +75,7 @@ export function TuiShowcase({ views = TUI_VIEWS, intro, tourMs = TUI_TOUR_MS }: 
   const [inView, setInView] = useState(false);
   const [mounted, setMounted] = useState<ReadonlySet<number>>(() => new Set([0, 1 % views.length]));
   const root = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const view = views[active];
 
@@ -131,9 +132,11 @@ export function TuiShowcase({ views = TUI_VIEWS, intro, tourMs = TUI_TOUR_MS }: 
   return (
     <Layout
       ref={root}
-      onMouseEnter={() => setHovered(true)}
+      // The rotation control must be able to start the tour while it retains focus or hover.
+      // Reading/interacting with the tabs and panel still pauses automatic rotation.
+      onMouseOver={(event) => setHovered(!toggle.current?.contains(event.target as Node))}
       onMouseLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
+      onFocus={(event) => setFocused(!toggle.current?.contains(event.target as Node))}
       onBlur={onBlur}
     >
       <Side>
@@ -172,7 +175,7 @@ export function TuiShowcase({ views = TUI_VIEWS, intro, tourMs = TUI_TOUR_MS }: 
           ))}
         </TabList>
         {reduced ? null : (
-          <TourToggle type="button" aria-pressed={!playing} onClick={() => setPlaying((value) => !value)}>
+          <TourToggle ref={toggle} type="button" aria-pressed={!playing} onClick={() => setPlaying((value) => !value)}>
             {playing ? <PauseIcon /> : <PlayIcon />}
             {playing ? "Pause tour" : "Play tour"}
           </TourToggle>
