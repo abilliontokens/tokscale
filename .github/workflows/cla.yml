@@ -1,6 +1,7 @@
 name: CLA
 
-# Enable only after legal review and the branch + JSON setup in docs/cla-setup.md.
+# Runs as soon as this file is on the default branch. Merge it only after legal
+# review and the branch + JSON setup in docs/cla-setup.md.
 # No paths filter: both events publish a successful status for out-of-scope PRs.
 on:
   issue_comment:

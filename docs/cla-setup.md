@@ -8,7 +8,7 @@ Both the `cla-signatures` branch **and** `signatures/cla.json` must exist. An em
 
 These are explicit owner-operated steps, not actions performed by the workflow or initializer:
 
-1. Keep the workflow disabled in GitHub Actions until legal review and storage setup are complete. No product environment toggle is used.
+1. Do not merge `.github/workflows/cla.yml` to the default branch until legal review and storage setup are complete. GitHub runs a `pull_request_target` workflow as soon as the file is on the default branch, and a workflow that is not there yet cannot be disabled in advance. No product environment toggle is used.
 2. Inspect the effective Git identity (`git config user.name` and `git config user.email`) and the `origin` remote. Commits must use `Junho Yeo <i@junho.io>`. Check whether the remote branch already exists. If it does, inspect its current JSON and preserve every existing signature; do not run a bootstrap that replaces it.
 3. If the branch does not exist, fetch the trusted default branch and create a **new, dedicated worktree**, for example `git worktree add -b cla-signatures ../tokscale-cla-signatures origin/main`. Do not switch or clear a shared checkout. The branch can start from `main`; an orphan branch is not required.
 4. From the reviewed source checkout, run `node .github/scripts/cla/initialize.mjs ../tokscale-cla-signatures/signatures/cla.json`. The initializer only creates a local JSON file. It refuses to overwrite an existing file, and never creates a branch, contacts GitHub, commits, or pushes. The seed is:
@@ -19,7 +19,7 @@ These are explicit owner-operated steps, not actions performed by the workflow o
 
 5. In the new worktree, inspect the diff, stage **only** `signatures/cla.json`, and commit it as `docs(cla): initialize signature storage`. The owner can then explicitly push **that branch only** with `git push origin cla-signatures`. No PAT is needed for the same-repository workflow.
 6. Read the remote branch and the Contents API response for `signatures/cla.json?ref=cla-signatures`. Confirm the branch, file, and JSON shape actually exist. Protect the signature branch from untrusted/manual replacement while allowing this repository's `GITHUB_TOKEN` to update that file. Repository rules can deny these updates; confirm the allowed write path rather than broadly disabling protections.
-7. Make the reviewed workflow and scripts available on the trusted default branch. Enable the workflow and run the acceptance checks below before making a status required. These steps are intentionally left to the owner; a successful local test is not proof of live workflow setup.
+7. Merge the reviewed workflow and scripts to the trusted default branch only after steps 1-6. The check is live from that moment. Run the acceptance checks below before making a status required. These steps are intentionally left to the owner; a successful local test is not proof of live workflow setup.
 
 If a seed or signature file already exists, **stop and inspect it** instead of deleting or regenerating it. Existing `signedContributors` entries use numeric GitHub account IDs and login names. New records also retain the exact consent body, comment ID/URL, creation timestamp, repository ID, and PR number. Treat this branch as public signature evidence and keep its history.
 
