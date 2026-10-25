@@ -55,9 +55,22 @@ function parse<T>(schema: { safeParse: (v: unknown) => { success: true; data: T 
   return result.data;
 }
 
+/** Recursively sort object keys so plain JSON values have a stable canonical form. */
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, nested]) => [key, canonicalJson(nested)])
+    );
+  }
+  return value;
+}
+
 /** Deep equality for plain JSON values, used to allow one source to be repeated verbatim in several files. */
 function sameJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a, Object.keys(a as object).sort()) === JSON.stringify(b, Object.keys(b as object).sort());
+  return JSON.stringify(canonicalJson(a)) === JSON.stringify(canonicalJson(b));
 }
 
 /** Phrases that mark a rumor or an unfinished negotiation. Such text never becomes a published number. */

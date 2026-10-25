@@ -12,11 +12,27 @@ describe("ledger content", () => {
     statementFiles: STATEMENT_FILES.map((f) => ({ file: f.file, data: structuredClone(f.data) })),
     capex: structuredClone(capexJson),
   });
-  type EventFileData = { sources: Array<Record<string, unknown>>; event: Record<string, unknown> & { amounts: Array<Record<string, unknown>>; participants: Array<Record<string, unknown>>; relations: Array<Record<string, unknown>>; title: string; status: string } };
+  type EventFileData = {
+    sources: Array<Record<string, unknown> & { id?: string; filing?: Record<string, unknown> }>;
+    event: Record<string, unknown> & {
+      amounts: Array<Record<string, unknown>>;
+      participants: Array<Record<string, unknown>>;
+      relations: Array<Record<string, unknown>>;
+      title: string;
+      status: string;
+    };
+  };
   const eventFile = (r: RawLedgerContent, file: string) => r.eventFiles.find((f) => f.file === file)!.data as EventFileData;
 
   it("accepts the shipped content", () => {
     expect(() => validateLedgerContent(raw())).not.toThrow();
+  });
+
+  it("rejects a repeated source when a nested filing field differs", () => {
+    const broken = raw();
+    const source = eventFile(broken, "spacex-ipo-2026.json").sources.find((item) => item.id === "src_spacex_10q_2026_06_30")!;
+    source.filing!.form = "10-Q/A";
+    expect(() => validateLedgerContent(broken)).toThrow(/source src_spacex_10q_2026_06_30 is defined twice with different fields/);
   });
 
   it("indexes every content file on disk", () => {
