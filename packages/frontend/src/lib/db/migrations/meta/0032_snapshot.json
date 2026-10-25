@@ -1,5 +1,5 @@
 {
-  "id": "dc0c0217-fac9-4026-904a-67ea1912e9ad",
+  "id": "2d12e20c-cf6c-4983-9e0e-dae89c5f13aa",
   "prevId": "2f8cfcb7-c595-4a05-b2c7-23b687af5520",
   "version": "7",
   "dialect": "postgresql",
@@ -558,35 +558,87 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.explore_cache_revision": {
-      "name": "explore_cache_revision",
+    "public.group_invite_redemptions": {
+      "name": "group_invite_redemptions",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+        "invite_id": {
+          "name": "invite_id",
+          "type": "uuid",
+          "primaryKey": false,
           "notNull": true
         },
-        "revision": {
-          "name": "revision",
-          "type": "bigint",
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "redeemed_at": {
+          "name": "redeemed_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
-          "default": "0"
+          "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "indexes": {
+        "idx_group_invite_redemptions_user": {
+          "name": "idx_group_invite_redemptions_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "group_invite_redemptions_invite_id_group_invites_id_fk": {
+          "name": "group_invite_redemptions_invite_id_group_invites_id_fk",
+          "tableFrom": "group_invite_redemptions",
+          "tableTo": "group_invites",
+          "columnsFrom": [
+            "invite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "group_invite_redemptions_user_id_users_id_fk": {
+          "name": "group_invite_redemptions_user_id_users_id_fk",
+          "tableFrom": "group_invite_redemptions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "group_invite_redemptions_invite_id_user_id_pk": {
+          "name": "group_invite_redemptions_invite_id_user_id_pk",
+          "columns": [
+            "invite_id",
+            "user_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "explore_cache_revision_singleton": {
-          "name": "explore_cache_revision_singleton",
-          "value": "\"explore_cache_revision\".\"id\" = 1"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.group_invites": {
@@ -661,6 +713,20 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "max_uses": {
+          "name": "max_uses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "use_count": {
+          "name": "use_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -817,7 +883,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "group_invites_use_limits": {
+          "name": "group_invites_use_limits",
+          "value": "\"group_invites\".\"max_uses\" BETWEEN 1 AND 1000 AND \"group_invites\".\"use_count\" BETWEEN 0 AND \"group_invites\".\"max_uses\""
+        },
+        "group_invites_target_single_use": {
+          "name": "group_invites_target_single_use",
+          "value": "(\"group_invites\".\"invited_username_normalized\" IS NULL AND \"group_invites\".\"invited_user_id\" IS NULL) OR \"group_invites\".\"max_uses\" = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.group_members": {

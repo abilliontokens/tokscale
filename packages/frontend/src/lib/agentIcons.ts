@@ -72,6 +72,7 @@ export const AGENT_ICONS: Readonly<Record<string, string>> = {
   "micode-desktop": "/assets/v2/agents/client-micode-desktop.webp",
   muse: "/assets/v2/agents/gh-meta-models.webp",
   vibe: "/assets/v2/agents/gh-mistralai.webp",
+  proma: "/assets/v2/agents/raw-githubusercontent-com-proma-icon.webp",
 };
 
 /** Vendored icon for a client id, or null when there is none. */

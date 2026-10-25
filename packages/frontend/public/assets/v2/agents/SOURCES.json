@@ -391,6 +391,14 @@
       ],
       "source": "https://github.com/mistralai.png",
       "readme_row": "Mistral Vibe"
+    },
+    "raw-githubusercontent-com-proma-icon.webp": {
+      "clients": [
+        "proma"
+      ],
+      "source": "https://raw.githubusercontent.com/proma-ai/Proma/86d9dfb511db4c1e3ffded3b6c3e312996f50cbf/apps/electron/resources/icon.png",
+      "readme_row": "Proma",
+      "retrieved": "2026-10-25"
     }
   }
 }
