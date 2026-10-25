@@ -225,6 +225,15 @@ function inList(values: string[]): SQL {
   );
 }
 
+/**
+ * The catalog covers all time, so a known model can have no usage in a
+ * shorter period. Such a period has no detail: the model page then falls
+ * back to all time instead of showing an empty window.
+ */
+function hasPeriodUsage(rollup: PeriodRollup, key: string): boolean {
+  return rollup.models.some((m) => m.key === key);
+}
+
 export async function computeModelDetail(
   rawKey: string,
   period: ExplorePeriod,
@@ -236,6 +245,7 @@ export async function computeModelDetail(
   const aliases = catalog.aliases[key];
   if (!aliases || aliases.length === 0) return null;
   const rollup = deps?.rollup ?? (await getPeriodRollup(period));
+  if (!hasPeriodUsage(rollup, key)) return null;
   // Same window as the rollup the summary comes from, even if that rollup is cached.
   const window = resolveWindow(period, { firstDate: rollup.coverage.start, latestDate: rollup.coverage.end }, rollup.coverage.end);
 
@@ -344,6 +354,8 @@ export async function getModelDetailCached(rawKey: string, period: ExplorePeriod
   const catalog = await getCatalogForGeneration(generation);
   if (!catalog.aliases[key]?.length) return null;
   const { rollup } = await getPeriodData(period, generation);
+  // No usage in this period: skip the detail scan and its cache entry.
+  if (!hasPeriodUsage(rollup, key)) return null;
   // A dependency can return its previous snapshot during ordinary SWR. Bind
   // the composed detail to that exact snapshot, not just the period name, so
   // a later fresh rollup cannot hit a detail built with the older summary.

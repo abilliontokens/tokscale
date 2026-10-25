@@ -7,7 +7,7 @@ await vi.hoisted(async () => {
   const { AsyncLocalStorage } = await import("node:async_hooks");
   Object.assign(globalThis, { AsyncLocalStorage });
 });
-const state = vi.hoisted(() => ({ hidden: false, deleted: false, large: false, revision: 0, revisionAvailable: true, revisionError: false, queries: [] as string[],
+const state = vi.hoisted(() => ({ hidden: false, deleted: false, large: false, recentIdle: false, revision: 0, revisionAvailable: true, revisionError: false, queries: [] as string[],
   pause: null as null | { match: string; entered: () => void; resume: Promise<void> },
 }));
 vi.mock("@/lib/groups/cache", () => ({ revalidateUserGroupLeaderboards: vi.fn(async () => {}) }));
@@ -20,8 +20,11 @@ vi.mock("@/lib/db", async () => {
   const dialect = new PgDialect();
   const usernames = () => state.hidden || state.deleted ? ["visible"] : ["target", "visible"];
   const execute = async (query: SQL) => {
-    const text = dialect.sqlToQuery(query).sql;
+    const { sql: text, params } = dialect.sqlToQuery(query);
     state.queries.push(text);
+    // recentIdle: every use is older than the 7-day window. Window queries bind
+    // their start date first, and only "all" starts at the first date with data.
+    const idle = state.recentIdle && params[0] !== "2026-10-01";
     if (text.includes("SELECT revision::text")) {
       if (state.revisionError) throw new Error('relation "explore_cache_revision" does not exist');
       return state.revisionAvailable ? [{ revision: String(state.revision) }] : [];
@@ -56,8 +59,9 @@ vi.mock("@/lib/db", async () => {
       }
       return rows;
     }
-    if (text.includes("s.user_id::text AS user_id")) return usernames().map(user_id => ({ user_id, client: "codex", model: "gpt-5.5", current: true, tokens: 100, cost: 1, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }));
+    if (text.includes("s.user_id::text AS user_id")) return usernames().map(user_id => ({ user_id, client: "codex", model: "gpt-5.5", current: !idle, tokens: 100, cost: 1, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }));
     if (text.includes("u.id::text AS user_id")) {
+      if (idle) return [];
       const rows = usernames().map(username => ({ user_id: username, username, display_name: null, avatar_url: null, tokens: 100, cost: 1, active_days: 1, last_submitted_at: "2026-10-19T00:00:00.000Z" }));
       if (state.pause?.match === "humans") {
         const pause = state.pause;
@@ -67,7 +71,7 @@ vi.mock("@/lib/db", async () => {
       }
       return rows;
     }
-    if (text.includes("WITH cells AS MATERIALIZED")) return [{
+    if (text.includes("WITH cells AS MATERIALIZED")) return idle ? [{ trend: [], cells: [], user_days: [] }] : [{
       trend: [{ date: "2026-10-19", activeUsers: usernames().length, tokens: usernames().length * 100 }],
       cells: usernames().map(username => ({ username, displayName: null, avatarUrl: null, client: "codex", tokens: 100, cost: 1, input: 100, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 })),
       user_days: usernames().map(username => ({ username, days: 1 })),
@@ -146,6 +150,7 @@ beforeEach(async () => {
   state.revisionAvailable = true;
   state.revisionError = false;
   state.large = false;
+  state.recentIdle = false;
   state.pause = null;
   state.queries = [];
   background.length = 0;
@@ -362,6 +367,25 @@ describe("actual Next analytics cache", () => {
       expect(await render(() => getModelDetailCached(key, "all"))).toBeNull();
     }
     expect(dataQueries()).toEqual([]);
+  });
+
+  it("has no detail for a period without usage, so the model page falls back to all time", async () => {
+    const { computeModelDetail, getModelCatalog, getModelDetailCached, getPeriodRollup } = await import("@/lib/explore/db");
+    const { getModelDetail } = await import("@/lib/explore");
+    state.recentIdle = true;
+    expect(await render(() => getModelDetailCached("gpt-5.5", "7d"))).toBeNull();
+    const [catalog, rollup] = await Promise.all([render(() => getModelCatalog()), render(() => getPeriodRollup("7d"))]);
+    expect(catalog.aliases["gpt-5.5"]).toEqual(["gpt-5.5"]);
+    expect(rollup.models).toEqual([]);
+    expect(await computeModelDetail("gpt-5.5", "7d", { catalog, rollup })).toBeNull();
+    expect(dataQueries().some(q => q.includes("WITH cells AS MATERIALIZED"))).toBe(false);
+    vi.stubEnv("DATABASE_URL", "postgresql://tokscale:tokscale@127.0.0.1:5480/tokscale");
+    try {
+      expect(await render(() => getModelDetail("gpt-5.5", "7d"))).toBeNull();
+      const allTime = await render(() => getModelDetail("gpt-5.5", "all"));
+      expect(allTime?.summary.activeUsers).toBe(2);
+      expect(allTime?.humans).toHaveLength(2);
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("shares period scans with pricing mixes and concurrent cold rollup loads", async () => {

@@ -66,7 +66,8 @@ export async function getHumansLeaderboard(q: LeaderboardQuery = {}): Promise<Ra
 /**
  * Detail for one model. `key` may be any spelling of the model id; the result's
  * `model.key` is canonical, so a page can redirect when they differ. Returns
- * null for unknown or unidentified models.
+ * null for unknown or unidentified models, and for a known model without
+ * public usage in `period` (the model page then falls back to all time).
  */
 export async function getModelDetail(key: string, period: ExplorePeriod = "30d"): Promise<ModelDetail | null> {
   if (!hasDatabase()) return fixtureModelDetail(key, period);
