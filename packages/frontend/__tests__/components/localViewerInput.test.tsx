@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataInput } from "@/components/DataInput";
 import { localExport } from "../support/localExport";
@@ -13,9 +13,9 @@ afterEach(() => {
 
 function setup() {
   const onDataLoaded = vi.fn();
-  render(<DataInput onDataLoaded={onDataLoaded} />);
+  const view = render(<DataInput onDataLoaded={onDataLoaded} />);
   const textarea = screen.getByRole("textbox", { name: "Export JSON" });
-  return { onDataLoaded, textarea };
+  return { onDataLoaded, textarea, unmount: view.unmount };
 }
 
 const invalidExportCases: Array<readonly [string, (data: ReturnType<typeof localExport>) => unknown]> = [
@@ -142,6 +142,73 @@ describe("local viewer data input", () => {
     const file = new File([JSON.stringify(data)], "usage.json", { type: "application/json" });
     fireEvent.change(input as HTMLInputElement, { target: { files: [file] } });
     await waitFor(() => expect(onDataLoaded).toHaveBeenCalledWith(data));
+  });
+
+  it("keeps the later file when two reads finish out of order", async () => {
+    const readers: ControlledFileReader[] = [];
+
+    class ControlledFileReader {
+      result: string | null = null;
+      error: Error | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor() {
+        readers.push(this);
+      }
+
+      readAsText() {}
+
+      resolve(text: string) {
+        this.result = text;
+        this.onload?.();
+      }
+    }
+
+    vi.stubGlobal("FileReader", ControlledFileReader);
+    const { onDataLoaded } = setup();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+    const first = localExport();
+    const second = { ...localExport(), meta: { ...localExport().meta, version: "later-choice" } };
+
+    fireEvent.change(input, { target: { files: [new File(["first"], "first.json", { type: "application/json" })] } });
+    fireEvent.change(input, { target: { files: [new File(["second"], "second.json", { type: "application/json" })] } });
+    expect(readers).toHaveLength(2);
+
+    await act(async () => readers[1].resolve(JSON.stringify(second)));
+    expect(onDataLoaded).toHaveBeenCalledTimes(1);
+    expect(onDataLoaded).toHaveBeenLastCalledWith(second);
+
+    await act(async () => readers[0].resolve(JSON.stringify(first)));
+    expect(onDataLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a file read that finishes after unmount", async () => {
+    let finishRead: ((text: string) => void) | undefined;
+
+    class ControlledFileReader {
+      result: string | null = null;
+      error: Error | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      readAsText() {
+        finishRead = (text: string) => {
+          this.result = text;
+          this.onload?.();
+        };
+      }
+    }
+
+    vi.stubGlobal("FileReader", ControlledFileReader);
+    const { onDataLoaded, unmount } = setup();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["pending"], "pending.json", { type: "application/json" })] } });
+    expect(finishRead).toBeTypeOf("function");
+
+    unmount();
+    await act(async () => finishRead?.(JSON.stringify(localExport())));
+    expect(onDataLoaded).not.toHaveBeenCalled();
   });
 
   it("loads a dropped export and shows where to drop it while dragging", async () => {

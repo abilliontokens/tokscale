@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from "react";
 import styled, { keyframes } from "styled-components";
 import type { TokenContributionData } from "@/lib/types";
 import { isValidContributionData, normalizeContributionData } from "@/lib/utils";
@@ -26,11 +26,21 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
   const titleId = useId();
   const textareaId = useId();
   const tipId = useId();
   const errorId = useId();
   const stepsId = useId();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadGenerationRef.current += 1;
+    };
+  }, []);
 
   const parseText = useCallback((text: string) => {
     setError(null);
@@ -54,10 +64,16 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
     }
   }, [onDataLoaded]);
 
-  const parseJson = useCallback(() => parseText(rawJson), [parseText, rawJson]);
+  const parseJson = useCallback(() => {
+    loadGenerationRef.current += 1;
+    setIsLoading(false);
+    parseText(rawJson);
+  }, [parseText, rawJson]);
 
   // A file is read in the browser, like pasted text: nothing leaves the machine.
   const loadFile = useCallback(async (file: File) => {
+    const generation = ++loadGenerationRef.current;
+    setIsLoading(false);
     setError(null);
     if (!/\.json$/i.test(file.name) && file.type !== "application/json") {
       setError(`${file.name} is not a .json file. Save the export with tokscale graph --output usage.json.`);
@@ -65,9 +81,11 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
     }
     try {
       const text = await readFileText(file);
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       setRawJson(text);
       parseText(text);
     } catch (err) {
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       setError(`Failed to read ${file.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   }, [parseText]);
@@ -75,6 +93,7 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
   const draggingFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes("Files");
 
   const loadSampleData = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -84,13 +103,15 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
 
       const data = normalizeContributionData(await response.json());
       if (!isValidContributionData(data)) throw new Error("Sample data has invalid format");
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
 
       setRawJson(JSON.stringify(data, null, 2));
       onDataLoaded(data);
     } catch (err) {
+      if (!mountedRef.current || generation !== loadGenerationRef.current) return;
       setError(`Failed to load sample data: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current && generation === loadGenerationRef.current) setIsLoading(false);
     }
   }, [onDataLoaded]);
 
@@ -134,6 +155,8 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
             id={textareaId}
             value={rawJson}
             onChange={(e) => {
+              loadGenerationRef.current += 1;
+              setIsLoading(false);
               setRawJson(e.target.value);
               setError(null);
             }}
