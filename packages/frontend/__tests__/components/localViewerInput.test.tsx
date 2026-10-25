@@ -32,6 +32,10 @@ const invalidExportCases: Array<readonly [string, (data: ReturnType<typeof local
       index === 0 ? { ...day, timestampMs: Number.MAX_VALUE } : day
     ),
   })],
+  ["a fractional intensity", (data) => ({
+    ...data,
+    contributions: data.contributions.map((day, index) => (index === 0 ? { ...day, intensity: 1.5 } : day)),
+  })],
   ["a prototype property as a client id", (data) => ({
     ...data,
     summary: { ...data.summary, clients: ["__proto__"] },

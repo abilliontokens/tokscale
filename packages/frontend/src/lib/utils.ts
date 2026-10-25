@@ -443,6 +443,7 @@ function isDailyContribution(value: unknown): boolean {
       value.timestampMs === null ||
       (isFiniteNumber(value.timestampMs) && Number.isFinite(new Date(value.timestampMs).getTime()))) &&
     isFiniteNumber(value.intensity) &&
+    Number.isInteger(value.intensity) &&
     value.intensity >= 0 &&
     value.intensity <= 4 &&
     hasNumberFields(value.totals, ["tokens", "cost", "messages"]) &&
