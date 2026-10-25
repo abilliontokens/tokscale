@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TOKSCALE_X_HANDLE } from "@/lib/community";
-import { companiesCsvPath, companiesPath, companiesUrl, methodologyPath } from "@/lib/capital";
+import { companiesPath, companiesUrl, methodologyPath } from "@/lib/capital";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -124,11 +124,6 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         </p>
         <p className={styles.metaLine}>
           <span>Reviewed {formatPartialDate(ledger.reviewedAt())}</span>
-          <span>
-            <a className={styles.link} href={companiesCsvPath()} download>
-              Download CSV
-            </a>
-          </span>
         </p>
       </header>
 

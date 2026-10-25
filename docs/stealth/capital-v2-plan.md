@@ -434,7 +434,7 @@ Notes:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Companies                                                         33 tracked · Download CSV    │
+│ Companies                                                                        33 tracked    │
 │ The companies behind AI: labs, clouds, chips, data centers and power.                          │
 │ [Search name, alias, ticker…]  [Category ▾] [Country ▾] [Status ▾] [Stage ▾] [Last round ▾]    │
 │ [Equity raised ▾] [Has compute deals] [Has models on Tokscale] [Backed by… ▾]       Reset      │
@@ -908,7 +908,7 @@ Structured data (JSON-LD):
 - Company pages: `Organization` (or `Corporation` with `tickerSymbol` for public companies), `legalName`, `url`, `foundingDate`, `founder` (`Person`), `address`, `sameAs` (Wikidata URL, official site), `identifier` (`PropertyValue` for SEC CIK), `parentOrganization` (xAI to SpaceX). Plus `BreadcrumbList`.
 - Investor pages: `Organization` with `sameAs` and `identifier` (SEC IAPD number when present).
 - Event pages: `WebPage` with `about` (the issuer) and `mentions` (participants), plus `BreadcrumbList`. There is no good schema.org type for a funding round; do not fake one.
-- Dataset pages (`/capital/spending`, `/capital/data-centers`): `Dataset` with `creator`, `license`, `isBasedOn` (SEC; Epoch AI with CC BY), `temporalCoverage`, `distribution` (CSV).
+- Dataset pages (`/capital/spending`, `/capital/data-centers`): `Dataset` with `creator`, `license`, `isBasedOn` (SEC; Epoch AI with CC BY), `temporalCoverage`.
 - Directory pages: `ItemList`.
 - Editorial stories: `NewsArticle` (already used for 13F stories).
 
@@ -918,7 +918,7 @@ Do not index:
 - Events and profiles with no primary source, and anything "in review".
 - Org pages with no sourced fact (thin-content gate, like the model-page rule of five accounts).
 - Raw per-fund, per-month N-PORT pages (fold them into company and investor pages).
-- OG image routes and CSV downloads.
+- OG image routes.
 
 Sitemap: reuse `capitalSitemapEntries()` rules. `lastModified` = latest `reviewedAt` or correction
 date, never the request time.
@@ -946,7 +946,7 @@ Sizes: S = up to 1 day, M = 2-3 days, L = about 1 week (one engineer plus one ed
 | ID | Task | Size |
 |---|---|---|
 | P1.1 | `/capital` overview rewrite (section 4.3). Title: "Capital: Funding, Compute Deals and AI Spending \| Tokscale". | M |
-| P1.2 | `/capital/companies` directory with filters, views, URL state, CSV download (section 4.4). | L |
+| P1.2 | `/capital/companies` directory with filters, views, URL state (section 4.4). | L |
 | P1.3 | `/capital/companies/[slug]` v2 template with category variants (sections 4.5 and 4.8). Reuse the 13F positions table as "Public investors". | L |
 | P1.4 | `/capital/rounds` and `/capital/rounds/[slug]` (section 4.6). | M |
 | P1.5 | `/capital/compute` and `/capital/deals/[slug]`, with the Epoch data-center block and CC BY attribution (section 4.7). | M |
@@ -975,7 +975,7 @@ Definition of done for Phase 1:
 - People (founders and executives) from Wikidata and company pages. Public roles only.
 - Acquisitions as a first-class list.
 - Non-US primary sources: HKEXnews (after a terms check), UK Companies House, French registries.
-- Corrections UI and a public changelog. CSV and JSON downloads with license notes. Alerts.
+- Corrections UI and a public changelog. Alerts.
 - Move to database tables if editing volume grows.
 
 ---
