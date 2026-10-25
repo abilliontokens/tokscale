@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TOKSCALE_X_HANDLE } from "@/lib/community";
-import { companiesPath, companiesUrl, methodologyPath } from "@/lib/capital";
+import { absoluteUrl, companiesPath, companiesUrl, methodologyPath } from "@/lib/capital";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -111,7 +111,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
             "@type": "ListItem",
             position: index + 1,
             name: row.org.name,
-            url: companiesUrl().replace(/\/capital\/companies$/, row.org.companyHref ?? ""),
+            url: absoluteUrl(row.org.companyHref ?? companiesPath()),
           })),
         }}
       />
