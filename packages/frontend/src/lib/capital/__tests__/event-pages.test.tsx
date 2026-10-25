@@ -13,6 +13,13 @@ describe("compute event presentation", () => {
     expect(eventOgSourceLabel(event)).toBe(`SOURCE: ${event.sources[0].publisher.toUpperCase()}`);
   });
 
+  it("names the sources of the values an OG card shows, not of an omitted headline", () => {
+    // The $110B headline is counted elsewhere and left off the card; SoftBank's own filing backs one shown value.
+    const event = ledger.getEvent("openai-funding-2026-02")!;
+    expect(event.headline?.countedElsewhere).toBe(true);
+    expect(eventOgSourceLabel(event)).toBe("SOURCES: OPENAI, SOFTBANK GROUP");
+  });
+
   it("renders Mistral's step-up as a lower bound, including the formula", () => {
     const event = ledger.getEvent("mistral-series-d-2026")!;
     const doc = new DOMParser().parseFromString(renderToStaticMarkup(<EventDetail e={event} />), "text/html");

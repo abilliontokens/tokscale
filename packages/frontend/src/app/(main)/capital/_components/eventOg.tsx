@@ -6,10 +6,28 @@ import { titleCase } from "@/lib/text/titleCase";
 
 const ACCENT = "#53d1f3";
 
-/** The card's source line: the headline value's own source, else the event's first source. */
+/** The values a card shows: up to two amounts, then one quantity, at most three, each with its source. */
+function cardStats(e: EventView) {
+  const amounts = sortForDisplay(
+    e.amounts.filter((a) => a.skipped === null && a.amount.status !== "reported" && a.amount.measure !== "price_per_share"),
+    (a) => a.amount.measure
+  );
+  const quantity = e.quantities.find((q) => q.quantity.measure !== "shares" && q.quantity.measure !== "investors") ?? e.quantities[0];
+  return [
+    ...amounts.slice(0, 2).map((a) => ({ label: (a.amount.label ?? MEASURE_LABELS[a.amount.measure]).toUpperCase(), value: a.short, source: a.source })),
+    ...(quantity
+      ? [{ label: (quantity.quantity.label ?? QUANTITY_UNITS[quantity.quantity.measure].label).toUpperCase(), value: quantity.short, source: quantity.source }]
+      : []),
+  ].slice(0, 3);
+}
+
+/** The card's source line names the publishers of the values it shows; a card without values names the event's first source. */
 export function eventOgSourceLabel(e: EventView): string {
-  const source = e.headline?.source ?? e.sources[0];
-  return source ? `SOURCE: ${source.publisher.toUpperCase()}` : "";
+  const stats = cardStats(e);
+  const sources = stats.length > 0 ? stats.map((s) => s.source) : e.sources.slice(0, 1);
+  const publishers = [...new Set(sources.map((s) => s.publisher.toUpperCase()))];
+  if (publishers.length === 0) return "";
+  return `${publishers.length > 1 ? "SOURCES" : "SOURCE"}: ${publishers.join(", ")}`;
 }
 
 /**
@@ -20,15 +38,7 @@ export function eventOgSourceLabel(e: EventView): string {
 export async function eventOgImage(e: EventView): Promise<Response> {
   const eyebrow = titleCase(`${e.tag} · ${e.statusLabel} · ${formatPartialDate(e.date)}`);
   const title = e.title.replace(/\u2019/g, "'");
-  const amounts = sortForDisplay(
-    e.amounts.filter((a) => a.skipped === null && a.amount.status !== "reported" && a.amount.measure !== "price_per_share"),
-    (a) => a.amount.measure
-  );
-  const quantity = e.quantities.find((q) => q.quantity.measure !== "shares" && q.quantity.measure !== "investors") ?? e.quantities[0];
-  const stats = [
-    ...amounts.slice(0, 2).map((a) => ({ label: (a.amount.label ?? MEASURE_LABELS[a.amount.measure]).toUpperCase(), value: a.short })),
-    ...(quantity ? [{ label: (quantity.quantity.label ?? QUANTITY_UNITS[quantity.quantity.measure].label).toUpperCase(), value: quantity.short }] : []),
-  ].slice(0, 3);
+  const stats = cardStats(e);
   const source = eventOgSourceLabel(e);
   // The card font has no arrow glyph; the renderer would swap in an emoji.
   const parties = e.partiesText.replace(/ ↔ /g, " and ");
