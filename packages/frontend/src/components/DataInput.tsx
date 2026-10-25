@@ -3,7 +3,7 @@
 import { useCallback, useId, useRef, useState, type DragEvent } from "react";
 import styled, { keyframes } from "styled-components";
 import type { TokenContributionData } from "@/lib/types";
-import { isValidContributionData } from "@/lib/utils";
+import { isValidContributionData, normalizeContributionData } from "@/lib/utils";
 import { SecondaryButton } from "@/components/leaderboard/RankingUI";
 
 interface DataInputProps {
@@ -41,7 +41,7 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
     }
 
     try {
-      const parsed = JSON.parse(text);
+      const parsed = normalizeContributionData(JSON.parse(text));
 
       if (!isValidContributionData(parsed)) {
         setError("Invalid data format. Expected TokenContributionData structure with meta, summary, years, and contributions.");
@@ -82,7 +82,7 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
       const response = await fetch("/sample-data.json");
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-      const data = await response.json();
+      const data = normalizeContributionData(await response.json());
       if (!isValidContributionData(data)) throw new Error("Sample data has invalid format");
 
       setRawJson(JSON.stringify(data, null, 2));

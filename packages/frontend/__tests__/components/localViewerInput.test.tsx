@@ -18,6 +18,44 @@ function setup() {
   return { onDataLoaded, textarea };
 }
 
+const invalidExportCases: Array<readonly [string, (data: ReturnType<typeof localExport>) => unknown]> = [
+  ["null meta", (data) => ({ ...data, meta: null })],
+  ["null summary", (data) => ({ ...data, summary: null })],
+  ["missing summary clients", (data) => {
+    const summary: Partial<typeof data.summary> = { ...data.summary };
+    delete summary.clients;
+    return { ...data, summary };
+  }],
+  ["an out-of-range contribution timestamp", (data) => ({
+    ...data,
+    contributions: data.contributions.map((day, index) =>
+      index === 0 ? { ...day, timestampMs: Number.MAX_VALUE } : day
+    ),
+  })],
+  ["a prototype property as a client id", (data) => ({
+    ...data,
+    summary: { ...data.summary, clients: ["__proto__"] },
+    contributions: data.contributions.map((day, index) =>
+      index === 0
+        ? { ...day, clients: day.clients.map((line, lineIndex) => lineIndex === 0 ? { ...line, client: "__proto__" } : line) }
+        : day
+    ),
+  })],
+];
+
+function legacySourceExport() {
+  const data = localExport();
+  const { clients, ...summary } = data.summary;
+  return {
+    ...data,
+    summary: { ...summary, sources: clients },
+    contributions: data.contributions.map(({ clients: dayClients, ...day }) => ({
+      ...day,
+      sources: dayClients.map(({ client, ...line }) => ({ ...line, source: client })),
+    })),
+  };
+}
+
 describe("local viewer data input", () => {
   it("parses pasted `tokscale graph` JSON", () => {
     const { onDataLoaded, textarea } = setup();
@@ -39,6 +77,18 @@ describe("local viewer data input", () => {
     expect(onDataLoaded).toHaveBeenCalledTimes(2);
   });
 
+  it("loads graph exports from before the source-to-client rename", () => {
+    const { onDataLoaded, textarea } = setup();
+    const legacy = legacySourceExport();
+    fireEvent.change(textarea, { target: { value: JSON.stringify(legacy) } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+
+    expect(onDataLoaded).toHaveBeenCalledTimes(1);
+    const loaded = onDataLoaded.mock.calls[0][0];
+    expect(loaded.summary.clients).toEqual(legacy.summary.sources);
+    expect(loaded.contributions[0].clients[0].client).toBe(legacy.contributions[0].sources[0].source);
+  });
+
   it("reports broken JSON and the wrong shape as alerts on the field", () => {
     const { onDataLoaded, textarea } = setup();
     fireEvent.change(textarea, { target: { value: "{not json" } });
@@ -51,6 +101,23 @@ describe("local viewer data input", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
     expect(screen.getByRole("alert").textContent).toContain("Invalid data format");
+    expect(onDataLoaded).not.toHaveBeenCalled();
+  });
+
+  it.each(invalidExportCases)("rejects pasted exports with %s", (_label, makeInvalid) => {
+    const { onDataLoaded, textarea } = setup();
+    fireEvent.change(textarea, { target: { value: JSON.stringify(makeInvalid(localExport())) } });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+    expect(screen.getByRole("alert").textContent).toContain("Invalid data format");
+    expect(onDataLoaded).not.toHaveBeenCalled();
+  });
+
+  it.each(invalidExportCases)("rejects chosen exports with %s", async (_label, makeInvalid) => {
+    const { onDataLoaded } = setup();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    const file = new File([JSON.stringify(makeInvalid(localExport()))], "usage.json", { type: "application/json" });
+    fireEvent.change(input as HTMLInputElement, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Invalid data format"));
     expect(onDataLoaded).not.toHaveBeenCalled();
   });
 

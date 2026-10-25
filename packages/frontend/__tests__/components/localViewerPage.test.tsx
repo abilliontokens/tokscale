@@ -69,6 +69,27 @@ describe("local viewer page", () => {
     expect(screen.queryByRole("region", { name: "Day breakdown" })).toBeNull();
   });
 
+  it("renders an unknown future client with its raw id", () => {
+    const data = JSON.parse(JSON.stringify(localExport())) as {
+      summary: { clients: string[] };
+      contributions: Array<{ clients: Array<{ client: string }> }>;
+    };
+    data.summary.clients = ["future-agent"];
+    for (const day of data.contributions) {
+      for (const line of day.clients) line.client = "future-agent";
+    }
+
+    render(<LocalClient />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Export JSON" }), {
+      target: { value: JSON.stringify(data) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Parse JSON" }));
+
+    expect(screen.getByLabelText("Loaded export")).toBeTruthy();
+    const breakdown = screen.getByRole("region", { name: "Day breakdown" });
+    expect(within(breakdown).getByText("future-agent")).toBeTruthy();
+  });
+
   it("shows a loaded export and goes back to the input", () => {
     render(<LocalClient />);
     fireEvent.change(screen.getByRole("textbox", { name: "Export JSON" }), {
