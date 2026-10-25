@@ -167,6 +167,7 @@ const InviteDescription = styled.p`
 const InviteForm = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
   gap: 10px;
 
   @media (max-width: 720px) {
@@ -179,6 +180,17 @@ const InviteField = styled.label`
   gap: 6px;
   color: var(--service-text-muted);
   font-size: 0.8125rem;
+
+  /* Controls use the reporting calendar's field size, not the label size. */
+  input {
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 640px) {
+    input {
+      font-size: 1rem;
+    }
+  }
 `;
 
 const InviteList = styled.ul`
@@ -214,12 +226,13 @@ const InviteRoleSelect = styled(Select)`
   --select-width: 100%;
   --select-height: 36px;
   --select-padding-x: 12px;
-  --select-font-size: 1rem;
+  --select-font-size: 0.875rem;
   --select-background: var(--service-surface);
   --select-border-color: var(--service-border-strong);
 
   @media (max-width: 640px) {
     --select-height: 44px;
+    --select-font-size: 1rem;
   }
 `;
 
