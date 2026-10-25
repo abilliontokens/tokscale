@@ -461,7 +461,7 @@ function ComputeTable({ p }: { p: CompanyProfile }) {
                 {capacity.length > 0 ? capacity.map((q) => q.short).join(", ") : <Missing reason="No capacity stated in the source" />}
               </td>
               <td data-label="Source">
-                <SourceLink source={e.sources[0]} />
+                <SourceLink source={value?.source ?? capacity[0]?.source ?? e.sources[0]} />
               </td>
             </tr>
           );

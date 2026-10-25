@@ -171,7 +171,7 @@ export interface EventView extends EventRef {
   /** Indexable when at least one source is primary evidence. */
   indexable: boolean;
   /** The number a feed row shows: a money amount, else a quantity. */
-  headline: { short: string; words: string; kind: "amount" | "quantity"; countedElsewhere: boolean; amount: AmountView | null } | null;
+  headline: { short: string; words: string; kind: "amount" | "quantity"; countedElsewhere: boolean; amount: AmountView | null; source: Source } | null;
   /** Second number for rounds: the post-money valuation. */
   valuation: AmountView | null;
   /** "Anthropic ↔ Akamai" for deals; the issuer for financing. */
@@ -350,9 +350,10 @@ export function createLedgerModel(content: LedgerContent) {
           kind: "amount" as const,
           countedElsewhere: headlineAmount.skipped === "included_in",
           amount: headlineAmount,
+          source: headlineAmount.source,
         }
       : headlineQuantity
-        ? { short: headlineQuantity.short, words: headlineQuantity.short, kind: "quantity" as const, countedElsewhere: false, amount: null }
+        ? { short: headlineQuantity.short, words: headlineQuantity.short, kind: "quantity" as const, countedElsewhere: false, amount: null, source: headlineQuantity.source }
         : null;
 
     const side = (roles: Role[]) => participants.filter((p) => p.roles.some((r) => roles.includes(r)));

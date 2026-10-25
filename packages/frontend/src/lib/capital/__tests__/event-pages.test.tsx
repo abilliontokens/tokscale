@@ -2,10 +2,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { EventDetail, eventSeoTitle } from "@/app/(main)/capital/_components/EventDetail";
+import { eventOgSourceLabel } from "@/app/(main)/capital/_components/eventOg";
 import { generateMetadata } from "@/app/(main)/capital/deals/[slug]/page";
 import { ledger } from "@/lib/capital/ledger";
 
 describe("compute event presentation", () => {
+  it("keeps an event source on OG cards that have no headline value", () => {
+    const event = ledger.getEvent("nscale-s-1-2026")!;
+    expect(event.headline).toBeNull();
+    expect(eventOgSourceLabel(event)).toBe(`SOURCE: ${event.sources[0].publisher.toUpperCase()}`);
+  });
+
   it("renders Mistral's step-up as a lower bound, including the formula", () => {
     const event = ledger.getEvent("mistral-series-d-2026")!;
     const doc = new DOMParser().parseFromString(renderToStaticMarkup(<EventDetail e={event} />), "text/html");

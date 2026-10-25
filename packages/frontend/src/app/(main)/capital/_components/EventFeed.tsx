@@ -41,7 +41,7 @@ export function EventFeed({ events, showParties = true }: { events: EventView[];
             <span className={styles.feedStatus}>
               <span className={styles.statusText}>{e.statusLabel}</span>{" "}
               <span className={styles.cellSub}>
-                <SourceLink source={e.sources[0]} />
+                <SourceLink source={e.headline?.source ?? e.sources[0]} />
               </span>
             </span>
           </li>

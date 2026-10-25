@@ -180,7 +180,7 @@ export default async function InvestorPage({ params }: PageProps) {
                         {event.valuation ? <Amount view={event.valuation} /> : <Missing />}
                       </td>
                       <td data-label="Source">
-                        <SourceLink source={event.sources[0]} />
+                        <SourceLink source={size?.source ?? event.valuation?.source ?? event.sources[0]} />
                       </td>
                     </tr>
                   );

@@ -162,7 +162,7 @@ export default async function ComputePage({ searchParams }: PageProps) {
                   )}
                 </td>
                 <td data-label="Source">
-                  <SourceLink source={e.sources[0]} />
+                  <SourceLink source={value?.source ?? capacity[0]?.source ?? e.sources[0]} />
                 </td>
               </tr>
             );

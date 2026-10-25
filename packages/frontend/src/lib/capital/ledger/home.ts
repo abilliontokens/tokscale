@@ -171,17 +171,20 @@ function events(ledger: LedgerModel): HomeCapitalEvent[] {
   return ledger
     .getEvents()
     .slice(0, EVENT_LIMIT)
-    .map((e) => ({
-      id: e.id,
-      date: formatPartialDate(e.date),
-      tag: e.tag,
-      title: e.title,
-      parties: e.partiesText,
-      value: e.headline ? e.headline.short : null,
-      valuation: e.valuation ? e.valuation.short : null,
-      href: e.href,
-      source: e.sources[0] ? { label: sourceShortLabel(e.sources[0]), url: e.sources[0].url } : null,
-    }));
+    .map((e) => {
+      const source = e.headline?.source ?? e.sources[0];
+      return {
+        id: e.id,
+        date: formatPartialDate(e.date),
+        tag: e.tag,
+        title: e.title,
+        parties: e.partiesText,
+        value: e.headline ? e.headline.short : null,
+        valuation: e.valuation ? e.valuation.short : null,
+        href: e.href,
+        source: source ? { label: sourceShortLabel(source), url: source.url } : null,
+      };
+    });
 }
 
 /** Pure builder (tests pass their own ledger and usage snapshot). */

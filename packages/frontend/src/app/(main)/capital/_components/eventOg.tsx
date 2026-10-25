@@ -6,6 +6,12 @@ import { titleCase } from "@/lib/text/titleCase";
 
 const ACCENT = "#53d1f3";
 
+/** The card's source line: the headline value's own source, else the event's first source. */
+export function eventOgSourceLabel(e: EventView): string {
+  const source = e.headline?.source ?? e.sources[0];
+  return source ? `SOURCE: ${source.publisher.toUpperCase()}` : "";
+}
+
 /**
  * 1200x630 Open Graph card for a round or deal page, served at <event page>/og by a route
  * handler, so the URL is stable. Numbers come from the event's sourced amounts; nothing is
@@ -23,7 +29,7 @@ export async function eventOgImage(e: EventView): Promise<Response> {
     ...amounts.slice(0, 2).map((a) => ({ label: (a.amount.label ?? MEASURE_LABELS[a.amount.measure]).toUpperCase(), value: a.short })),
     ...(quantity ? [{ label: (quantity.quantity.label ?? QUANTITY_UNITS[quantity.quantity.measure].label).toUpperCase(), value: quantity.short }] : []),
   ].slice(0, 3);
-  const source = e.sources[0] ? `SOURCE: ${e.sources[0].publisher.toUpperCase()}` : "";
+  const source = eventOgSourceLabel(e);
   // The card font has no arrow glyph; the renderer would swap in an emoji.
   const parties = e.partiesText.replace(/ ↔ /g, " and ");
   const fonts = await loadOgFonts(`${eyebrow}${title}${parties}${stats.map((s) => s.label + s.value).join("")}${source}≈≤≥>`);
