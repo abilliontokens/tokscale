@@ -9,9 +9,41 @@ import { z } from "zod";
  * number. Rules the schema cannot express are checked in content.ts.
  */
 
-export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const PARTIAL_DATE_PATTERN = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/;
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function daysInMonth(year: number, month: number): number {
+  return [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+}
+
+function isCalendarDate(value: string): boolean {
+  const match = ISO_DATE_PATTERN.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
+}
+
+function isValidPartialDate(value: string): boolean {
+  const match = PARTIAL_DATE_PATTERN.exec(value);
+  if (!match) return false;
+  if (match[2] === undefined) return true;
+  const month = Number(match[2]);
+  if (match[3] === undefined) return month >= 1 && month <= 12;
+  return isCalendarDate(value);
+}
+
+export const isoDate = z.string().regex(ISO_DATE_PATTERN, "expected YYYY-MM-DD").refine(isCalendarDate, "expected a valid calendar date");
 /** A year, a month or a day: "2021", "2021-01", "2021-01-26". */
-export const partialDate = z.string().regex(/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/, "expected YYYY, YYYY-MM or YYYY-MM-DD");
+export const partialDate = z
+  .string()
+  .regex(PARTIAL_DATE_PATTERN, "expected YYYY, YYYY-MM or YYYY-MM-DD")
+  .refine(isValidPartialDate, "expected a valid calendar date");
 export const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "expected a lowercase slug");
 export const orgId = z.string().regex(/^org_[a-z0-9]+(?:_[a-z0-9]+)*$/, "expected an org id like org_anthropic");
 export const eventId = z.string().regex(/^evt_[a-z0-9]+(?:_[a-z0-9]+)*$/, "expected an event id like evt_anthropic_series_h_2026");
