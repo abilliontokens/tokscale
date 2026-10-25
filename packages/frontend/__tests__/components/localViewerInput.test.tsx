@@ -144,6 +144,26 @@ describe("local viewer data input", () => {
     await waitFor(() => expect(onDataLoaded).toHaveBeenCalledWith(data));
   });
 
+  it.each(["chosen", "dropped"] as const)("rejects an oversized %s export before reading it", async (source) => {
+    const fileReader = vi.fn();
+    vi.stubGlobal("FileReader", fileReader);
+    const { onDataLoaded } = setup();
+    const file = new File(["{}"], "huge.json", { type: "application/json" });
+    Object.defineProperty(file, "size", { value: 64 * 1024 * 1024 + 1 });
+
+    if (source === "chosen") {
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file] } });
+    } else {
+      const card = screen.getByRole("region", { name: "Load token usage data" });
+      fireEvent.drop(card, { dataTransfer: { types: ["Files"], files: [file] } });
+    }
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("under 64 MiB"));
+    expect(fileReader).not.toHaveBeenCalled();
+    expect(onDataLoaded).not.toHaveBeenCalled();
+  });
+
   it("keeps the later file when two reads finish out of order", async () => {
     const readers: ControlledFileReader[] = [];
 

@@ -10,6 +10,10 @@ interface DataInputProps {
   onDataLoaded: (data: TokenContributionData) => void;
 }
 
+// Graph exports contain daily client/model aggregates rather than raw messages. 64 MiB leaves ample
+// room for heavy multi-year histories while bounding the memory used by readAsText and JSON.parse.
+const MAX_LOCAL_EXPORT_BYTES = 64 * 1024 * 1024;
+
 /** Read a chosen or dropped file as text. FileReader works in every browser the site supports. */
 function readFileText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -77,6 +81,10 @@ export function DataInput({ onDataLoaded }: DataInputProps) {
     setError(null);
     if (!/\.json$/i.test(file.name) && file.type !== "application/json") {
       setError(`${file.name} is not a .json file. Save the export with tokscale graph --output usage.json.`);
+      return;
+    }
+    if (file.size > MAX_LOCAL_EXPORT_BYTES) {
+      setError(`${file.name} is too large. Choose a tokscale graph export under 64 MiB.`);
       return;
     }
     try {
